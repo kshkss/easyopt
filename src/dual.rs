@@ -23,18 +23,18 @@ where
         }
     }
 
-    fn var(&self, i: usize, v: T) -> Dual<T> {
-        let mut dx = Array1::<T>::zeros(self.max_var);
+    fn var(i: usize, n: usize, v: T) -> Dual<T> {
+        let mut dx = Array1::<T>::zeros(n);
         dx[i] = T::one();
         Dual::<T> {
             x: v,
-            dx: dx,
+            dx: ArcArray::from(dx),
         }
     }
 
     pub fn gen(&mut self, init_value: T) -> Option<Dual<T>> {
         if self.num_var < self.max_var {
-            let var = self.var(self.num_var, init_value);
+            let var = Self::var(self.num_var, self.max_var, init_value);
             self.num_var += 1;
             Some(var)
         } else {
@@ -44,7 +44,11 @@ where
 
     pub fn gen_all(&mut self, init_values: &[T]) -> Vec<Dual<T>> {
         if init_values.len() == self.max_var - self.num_var {
-            init_values.iter().zip(self.num_var..self.max_var).map(|(v, i)| self.var(i, v.clone())).collect()
+            init_values
+                .iter()
+                .zip(self.num_var..self.max_var)
+                .map(|(v, i)| Self::var(i, self.max_var, v.clone()))
+                .collect()
         } else {
             panic!();
         }
@@ -53,18 +57,21 @@ where
     pub fn constant(&self, value: T) -> Dual<T> {
         Dual::<T> {
             x: value,
-            dx: Array1::<T>::zeros(self.max_var),
+            dx: ArcArray::from(Array1::<T>::zeros(self.max_var)),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Dual<T = f64> {
     x: T,
-    dx: Array1<T>,
+    dx: ArcArray<T, Ix1>,
 }
 
-impl<T> Dual<T> {
+impl<T> Dual<T>
+where
+    T: Clone,
+{
     pub fn grad(&self) -> Option<ArrayView1<T>> {
         Some(self.dx.view())
     }
@@ -174,7 +181,7 @@ where
     fn add(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x + rhs.x,
-            dx: &self.dx + &rhs.dx,
+            dx: ArcArray::from(&self.dx + &rhs.dx),
         }
     }
 }
@@ -200,7 +207,7 @@ where
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x - rhs.x,
-            dx: &self.dx - &rhs.dx,
+            dx: ArcArray::from(&self.dx - &rhs.dx),
         }
     }
 }
@@ -226,7 +233,7 @@ where
     fn neg(self) -> Self::Output {
         Self {
             x: -self.x,
-            dx: -self.dx,
+            dx: ArcArray::from(-self.dx.to_owned()),
         }
     }
 }
@@ -239,7 +246,7 @@ where
     fn mul(self, rhs: Self) -> Self::Output {
         Self {
             x: self.x.clone() * rhs.x.clone(),
-            dx: &self.dx * rhs.x + &rhs.dx * self.x,
+            dx: ArcArray::from(&self.dx * rhs.x + &rhs.dx * self.x),
         }
     }
 }
@@ -252,7 +259,7 @@ where
     fn mul(self, rhs: T) -> Self::Output {
         Self {
             x: self.x * rhs.clone(),
-            dx: &self.dx * rhs,
+            dx: ArcArray::from(&self.dx * rhs),
         }
     }
 }
@@ -264,8 +271,10 @@ where
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         Self {
-            dx: &self.dx * rhs.x.clone()
-                - &rhs.dx * self.x.clone() / (rhs.x.clone() * rhs.x.clone()),
+            dx: ArcArray::from(
+                &self.dx * rhs.x.clone()
+                    - &rhs.dx * self.x.clone() / (rhs.x.clone() * rhs.x.clone()),
+            ),
             x: self.x / rhs.x,
         }
     }
@@ -278,7 +287,7 @@ where
     type Output = Self;
     fn div(self, rhs: T) -> Self::Output {
         Self {
-            dx: &self.dx / rhs.clone(),
+            dx: ArcArray::from(&self.dx / rhs.clone()),
             x: self.x / rhs,
         }
     }
@@ -292,9 +301,9 @@ mod test {
     fn it_works() {
         let mut vars = Variables::new(3);
         let x = vars.gen(0.).unwrap();
-        let mut rest = vars.gen_all(&[1., 10.]);
-        let y = rest.remove(0);
-        let z = rest.remove(0);
+        let rest = vars.gen_all(&[1., 10.]);
+        let y = rest[0].clone();
+        let z = rest[1].clone();
 
         let loss = (x + y) * z;
         assert_eq!(loss.grad(), Some(array![10., 10., 1.].view()));
