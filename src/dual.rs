@@ -2,54 +2,69 @@ use ndarray::prelude::*;
 use ndarray::ScalarOperand;
 use num_traits::{Num, NumOps, One, Zero};
 use std::cmp::Ordering;
-use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::marker::PhantomData;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub struct DualBuilder<T, const N: usize> {
+pub struct Variables<T = f64> {
+    max_var: usize,
     num_var: usize,
     _type: PhantomData<T>,
 }
 
-impl<T, const N: usize> DualBuilder<T, N>
+impl<T> Variables<T>
 where
     T: One + Zero + Clone,
 {
-    pub fn new() -> Self {
+    pub fn new(num_variables: usize) -> Self {
         Self {
+            max_var: num_variables,
             num_var: 0,
             _type: PhantomData::<T>,
         }
     }
 
-    pub fn variable(&mut self, init_value: T) -> Option<Dual<T, N>> {
-        if self.num_var < N {
-            let mut dx = Array1::<T>::zeros(N);
-            dx[self.num_var] = T::one();
+    fn var(&self, i: usize, v: T) -> Dual<T> {
+        let mut dx = Array1::<T>::zeros(self.max_var);
+        dx[i] = T::one();
+        Dual::<T> {
+            x: v,
+            dx: dx,
+        }
+    }
+
+    pub fn gen(&mut self, init_value: T) -> Option<Dual<T>> {
+        if self.num_var < self.max_var {
+            let var = self.var(self.num_var, init_value);
             self.num_var += 1;
-            Some(Dual::<T, N> {
-                x: init_value,
-                dx: dx,
-            })
+            Some(var)
         } else {
             None
         }
     }
 
-    pub fn constant(&self, value: T) -> Dual<T, N> {
-        Dual::<T, N> {
+    pub fn gen_all(&mut self, init_values: &[T]) -> Vec<Dual<T>> {
+        if init_values.len() == self.max_var - self.num_var {
+            init_values.iter().zip(self.num_var..self.max_var).map(|(v, i)| self.var(i, v.clone())).collect()
+        } else {
+            panic!();
+        }
+    }
+
+    pub fn constant(&self, value: T) -> Dual<T> {
+        Dual::<T> {
             x: value,
-            dx: Array1::<T>::zeros(N),
+            dx: Array1::<T>::zeros(self.max_var),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Dual<T, const N: usize> {
+pub struct Dual<T = f64> {
     x: T,
     dx: Array1<T>,
 }
 
-impl<T, const N: usize> Dual<T, N> {
+impl<T> Dual<T> {
     pub fn grad(&self) -> Option<ArrayView1<T>> {
         Some(self.dx.view())
     }
@@ -59,29 +74,15 @@ impl<T, const N: usize> Dual<T, N> {
     }
 }
 
-impl<T, const N: usize> Default for Dual<T, N>
-where
-    T: Zero + Clone,
-{
-    fn default() -> Self {
-        Self {
-            x: T::zero(),
-            dx: Array1::<T>::zeros(N),
-        }
-    }
-}
-
 /*
-impl<T, const N: usize> From<Dual<T, N>> for T
+impl<T> From<Dual<T>> for T
 {
-    fn from(item: Dual<T, N>) -> T {
+    fn from(item: Dual<T>) -> T {
         item.x
     }
 }
-*/
 
-/*
-impl<T, const N: usize> Into<T> for Dual<T, N>
+impl<T> Into<T> for Dual<T>
 {
     fn into(self) -> T {
         self.x
@@ -89,34 +90,31 @@ impl<T, const N: usize> Into<T> for Dual<T, N>
 }
 */
 
-impl<const N: usize> From<Dual<f64, N>> for f64
-{
-    fn from(item: Dual<f64, N>) -> f64 {
+impl From<Dual<f64>> for f64 {
+    fn from(item: Dual<f64>) -> f64 {
         item.x
     }
 }
 
 /*
-impl<T, U, const N: usize> From<Dual<T, N>> for Dual<U, N>
+impl<T, U> From<Dual<T>> for Dual<U>
 where
     U: From<T>,
 {
-    fn from(item: Dual<T, N>) -> Dual<U, N> {
-        Dual::<U, N> {
+    fn from(item: Dual<T>) -> Dual<U> {
+        Dual::<U> {
             x: U::from(item.x),
             dx: item.dx.map(|&v| U::from(v)),
         }
     }
 }
-*/
 
-/*
-impl<T, const N: usize> From<Dual<T, N>> for Dual<f64, N>
+impl<T> From<Dual<T>> for Dual<f64>
 where
     T: Into<f64>,
 {
-    fn from(item: Dual<T, N>) -> Dual<f64, N> {
-        Dual::<f64, N> {
+    fn from(item: Dual<T>) -> Dual<f64> {
+        Dual::<f64> {
             x: item.x.into(),
             dx: item.dx.map(|&v| v.into()),
         }
@@ -124,7 +122,7 @@ where
 }
 */
 
-impl<T, const N: usize> PartialEq for Dual<T, N>
+impl<T> PartialEq<Self> for Dual<T>
 where
     T: PartialEq,
 {
@@ -137,7 +135,20 @@ where
     }
 }
 
-impl<T, const N: usize> PartialOrd for Dual<T, N>
+impl<T> PartialEq<T> for Dual<T>
+where
+    T: PartialEq,
+{
+    fn eq(&self, other: &T) -> bool {
+        self.x.eq(&other)
+    }
+
+    fn ne(&self, other: &T) -> bool {
+        self.x.ne(&other)
+    }
+}
+
+impl<T> PartialOrd<Self> for Dual<T>
 where
     T: PartialOrd,
 {
@@ -146,35 +157,16 @@ where
     }
 }
 
-impl<T, const N: usize> Zero for Dual<T, N>
+impl<T> PartialOrd<T> for Dual<T>
 where
-    T: Zero + Clone,
+    T: PartialOrd,
 {
-    fn zero() -> Self {
-        Self {
-            x: T::zero(),
-            dx: Array1::<T>::zeros(N),
-        }
-    }
-
-    fn is_zero(&self) -> bool {
-        self.x.is_zero()
+    fn partial_cmp(&self, other: &T) -> Option<Ordering> {
+        self.x.partial_cmp(&other)
     }
 }
 
-impl<T, const N: usize> One for Dual<T, N>
-where
-    T: Zero + One + ScalarOperand + Clone,
-{
-    fn one() -> Self {
-        Self {
-            x: T::one(),
-            dx: Array1::<T>::zeros(N),
-        }
-    }
-}
-
-impl<T, const N: usize> Add<Self> for Dual<T, N>
+impl<T> Add<Self> for Dual<T>
 where
     T: Zero + Add + Clone,
 {
@@ -187,7 +179,7 @@ where
     }
 }
 
-impl<T, const N: usize> Add<T> for Dual<T, N>
+impl<T> Add<T> for Dual<T>
 where
     T: Zero + Add + Clone,
 {
@@ -200,7 +192,7 @@ where
     }
 }
 
-impl<T, const N: usize> Sub<Self> for Dual<T, N>
+impl<T> Sub<Self> for Dual<T>
 where
     T: Zero + Sub<Output = T> + Clone,
 {
@@ -213,7 +205,7 @@ where
     }
 }
 
-impl<T, const N: usize> Sub<T> for Dual<T, N>
+impl<T> Sub<T> for Dual<T>
 where
     T: Zero + Sub<Output = T> + Clone,
 {
@@ -226,7 +218,7 @@ where
     }
 }
 
-impl<T, const N: usize> Neg for Dual<T, N>
+impl<T> Neg for Dual<T>
 where
     T: Zero + Neg<Output = T> + Sub<Output = T> + Clone,
 {
@@ -239,7 +231,7 @@ where
     }
 }
 
-impl<T, const N: usize> Mul<Self> for Dual<T, N>
+impl<T> Mul<Self> for Dual<T>
 where
     T: Zero + One + Add + Mul + ScalarOperand + Clone,
 {
@@ -252,7 +244,7 @@ where
     }
 }
 
-impl<T, const N: usize> Mul<T> for Dual<T, N>
+impl<T> Mul<T> for Dual<T>
 where
     T: Zero + One + Add + Mul + ScalarOperand + Clone,
 {
@@ -265,20 +257,21 @@ where
     }
 }
 
-impl<T, const N: usize> Div<Self> for Dual<T, N>
+impl<T> Div<Self> for Dual<T>
 where
     T: Zero + One + Add + Sub<Output = T> + Mul + Div<Output = T> + ScalarOperand + Clone,
 {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         Self {
-            dx: &self.dx * rhs.x.clone() - &rhs.dx * self.x.clone() / (rhs.x.clone() * rhs.x.clone()),
+            dx: &self.dx * rhs.x.clone()
+                - &rhs.dx * self.x.clone() / (rhs.x.clone() * rhs.x.clone()),
             x: self.x / rhs.x,
         }
     }
 }
 
-impl<T, const N: usize> Div<T> for Dual<T, N>
+impl<T> Div<T> for Dual<T>
 where
     T: Zero + One + Add + Sub<Output = T> + Mul + Div<Output = T> + ScalarOperand + Clone,
 {
@@ -288,5 +281,22 @@ where
             dx: &self.dx / rhs.clone(),
             x: self.x / rhs,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let mut vars = Variables::new(3);
+        let x = vars.gen(0.).unwrap();
+        let mut rest = vars.gen_all(&[1., 10.]);
+        let y = rest.remove(0);
+        let z = rest.remove(0);
+
+        let loss = (x + y) * z;
+        assert_eq!(loss.grad(), Some(array![10., 10., 1.].view()));
     }
 }
