@@ -3,6 +3,45 @@ use ndarray::ScalarOperand;
 use num_traits::{Num, NumOps, One, Zero};
 use std::cmp::Ordering;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::marker::PhantomData;
+
+pub struct DualBuilder<T, const N: usize> {
+    num_var: usize,
+    _type: PhantomData<T>,
+}
+
+impl<T, const N: usize> DualBuilder<T, N>
+where
+    T: One + Zero + Clone,
+{
+    pub fn new() -> Self {
+        Self {
+            num_var: 0,
+            _type: PhantomData::<T>,
+        }
+    }
+
+    pub fn variable(&mut self, init_value: T) -> Option<Dual<T, N>> {
+        if self.num_var < N {
+            let mut dx = Array1::<T>::zeros(N);
+            dx[self.num_var] = T::one();
+            self.num_var += 1;
+            Some(Dual::<T, N> {
+                x: init_value,
+                dx: dx,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn constant(&self, value: T) -> Dual<T, N> {
+        Dual::<T, N> {
+            x: value,
+            dx: Array1::<T>::zeros(N),
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Dual<T, const N: usize> {
@@ -10,33 +49,7 @@ pub struct Dual<T, const N: usize> {
     dx: Array1<T>,
 }
 
-impl<T, const N: usize> Dual<T, N>
-where
-    T: One + Zero + Clone,
-{
-    pub fn new(variable_id: usize, init_value: T) -> Self {
-        if variable_id < N {
-            let mut dx = Array1::<T>::zeros(N);
-            dx[variable_id] = T::one();
-            Self {
-                x: init_value,
-                dx: dx,
-            }
-        } else {
-            panic!(
-                "variable_id is expected under {}, but found {}",
-                N, variable_id
-            );
-        }
-    }
-
-    pub fn constant(value: T) -> Self {
-        Self {
-            x: value,
-            dx: Array1::<T>::zeros(N),
-        }
-    }
-
+impl<T, const N: usize> Dual<T, N> {
     pub fn grad(&self) -> Option<ArrayView1<T>> {
         Some(self.dx.view())
     }
