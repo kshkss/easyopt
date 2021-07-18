@@ -7,5 +7,9 @@ edition = "2018"
 
 [dependencies]
 argmin = "0.4.5"
-ndarray = "0.15.3"
+ndarray = "0.14"
 num-traits = "0.2.14"
+thiserror = "1.0.26"
+
+[dev-dependencies]
+approx = "0.5.0"
