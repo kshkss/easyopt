@@ -1,5 +1,5 @@
-mod dual;
-mod traits;
+pub mod dual;
+pub mod traits;
 
 use thiserror::Error;
 #[derive(Error, Debug)]
@@ -11,7 +11,7 @@ pub enum Error {
 }
 
 pub use dual::{Dual, Variables};
-mod self_consistent;
+pub mod self_consistent;
 
 use crate::traits::*;
 

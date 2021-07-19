@@ -149,8 +149,7 @@ where
 }
 */
 
-mod ops;
-pub use self::ops::*;
+pub mod ops;
 
 impl<T, const N: usize> Zero for Dual<T, N>
 where
@@ -202,8 +201,7 @@ use crate::traits::Extension;
 impl<const N: usize> Extension<f32> for Dual<f32, N> {}
 impl<const N: usize> Extension<f64> for Dual<f64, N> {}
 
-mod elementary;
-pub use self::elementary::*;
+pub mod elementary;
 
 #[cfg(test)]
 mod test {

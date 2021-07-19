@@ -42,5 +42,3 @@ where
 
 pub mod solver;
 
-use crate::traits::*;
-
