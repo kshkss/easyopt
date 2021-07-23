@@ -1,5 +1,4 @@
 use super::Dual;
-use crate::traits::*;
 /*
 use num_traits::{Float, Num};
 

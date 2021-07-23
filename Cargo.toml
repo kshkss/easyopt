@@ -1,15 +1,6 @@
-[package]
-name = "easyopt"
-version = "0.1.0"
-edition = "2018"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-argmin = "0.4.5"
-ndarray = "0.14"
-num-traits = "0.2.14"
-thiserror = "1.0.26"
-
-[dev-dependencies]
-approx = "0.5.0"
+members = [
+	"dual",
+	"easyopt",
+]

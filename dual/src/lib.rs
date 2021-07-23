@@ -197,10 +197,6 @@ where
     }
 }
 
-use crate::traits::Extension;
-impl<const N: usize> Extension<f32> for Dual<f32, N> {}
-impl<const N: usize> Extension<f64> for Dual<f64, N> {}
-
 pub mod elementary;
 
 #[cfg(test)]

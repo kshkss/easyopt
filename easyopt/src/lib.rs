@@ -1,4 +1,3 @@
-pub mod dual;
 pub mod traits;
 
 use thiserror::Error;
