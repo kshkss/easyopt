@@ -3,4 +3,5 @@
 members = [
 	"dual",
 	"easyopt",
+	"table-dump",
 ]

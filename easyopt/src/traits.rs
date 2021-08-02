@@ -35,6 +35,26 @@ impl<T, Rhs, Output> BinaryOperand<Rhs, Output> for T where
 {
 }
 
+pub trait Float: Zero + One {
+    type Scalar;
+    fn nan() -> Self;
+    fn abs(&self) -> Self;
+}
+
+impl Float for f64 {
+    type Scalar = f64;
+
+    #[inline]
+    fn nan() -> Self {
+        std::f64::NAN
+    }
+
+    #[inline]
+    fn abs(&self) -> Self {
+        f64::abs(*self)
+    }
+}
+
 /*
 pub trait ScalarOperand<T>: BinaryOperand<T, T> + for<'a> BinaryOperand<&'a T, T>
 {
@@ -69,11 +89,28 @@ pub trait Solver<T>
 where
     T: Op,
 {
+    type ReportArg;
     fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
+    fn init_report<R: Report<Arg = Self::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error>;
+    fn update_report<R: Report<Arg = Self::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error>;
 }
 
-pub trait Criteria {
-    type Variable;
-    fn apply(&self, xnew: &Self::Variable, x: &Self::Variable) -> Result<(), f64>;
+pub trait Report {
+    type Arg;
+    fn init(&mut self, s: &Self::Arg) -> Result<(), Error>;
+    fn update(&mut self, s: &Self::Arg) -> Result<(), Error>;
 }
 
+pub trait Monitor<T>: FnMut(&T) -> anyhow::Result<()> {}
+impl<T: Report, F> Monitor<T> for F where F: FnMut(&T) -> anyhow::Result<()> {}
+
+pub trait Criteria<T>: Fn(&T) -> Result<(), f64> {}
+impl<T: Report, F> Criteria<T> for F where F: Fn(&T) -> Result<(), f64> {}

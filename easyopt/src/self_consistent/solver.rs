@@ -1,9 +1,47 @@
 use super::SelfConsistentOp;
-use crate::traits::{BinaryOperand, Op, Solver};
+use crate::traits::*;
 use crate::Error;
 use num_traits::One;
 use std::marker::PhantomData;
 //use std::ops::{Add, Div, Mul, Sub};
+
+pub trait SelfConsistentOpSolver<T>
+where
+    T: SelfConsistentOp,
+{
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
+}
+
+impl<S, T> Solver<T> for S
+where
+    T: SelfConsistentOp,
+    S: SelfConsistentOpSolver<T>,
+{
+    type ReportArg = T::Variable;
+
+    #[inline]
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
+        <Self as SelfConsistentOpSolver<T>>::next_iter(self, op, x)
+    }
+
+    #[inline]
+    fn init_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.init(x)
+    }
+
+    #[inline]
+    fn update_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.update(x)
+    }
+}
 
 pub struct Wegstein<T, K = f64> {
     y_prev: Option<T>,
@@ -21,7 +59,7 @@ impl<T, F> Wegstein<T, F> {
     }
 }
 
-impl<T, U, F> Solver<T> for Wegstein<U, F>
+impl<T, U, F> SelfConsistentOpSolver<T> for Wegstein<U, F>
 where
     T: Op<Variable = U> + SelfConsistentOp<Variable = <T as Op>::Variable>,
     F: One + BinaryOperand<U, U> + for<'a> BinaryOperand<&'a U, U>,
@@ -54,7 +92,7 @@ impl Steffensen {
     }
 }
 
-impl<T> Solver<T> for Steffensen
+impl<T> SelfConsistentOpSolver<T> for Steffensen
 where
     T: Op + SelfConsistentOp<Variable = <T as Op>::Variable>,
     for<'a> <T as Op>::Variable: BinaryOperand<&'a <T as Op>::Variable, <T as Op>::Variable>,
@@ -73,46 +111,68 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::criteria;
+    use crate::monitor;
+    use crate::self_consistent::*;
+    use crate::Executor;
     use approx::relative_eq;
-    use crate::{Executor, Tolerance};
-
-    struct TestCase01 {
-        a: f64,
-        b: f64,
-        c: f64,
-    }
-    impl SelfConsistentOp for TestCase01 {
-        type Variable = f64;
-        fn apply(&self, x: &f64) -> Result<f64, Error> {
-            Ok(self.a * x * x + self.b * x + self.c)
-        }
-    }
 
     #[test]
-    fn case01_wegstein() {
+    fn case01_wegstein() -> anyhow::Result<()> {
+        struct TestCase01 {
+            a: f64,
+            b: f64,
+            c: f64,
+        }
+        impl SelfConsistentOp for TestCase01 {
+            type Variable = f64;
+            fn apply(&self, x: &f64) -> Result<f64, Error> {
+                Ok(self.a * x * x + self.b * x + self.c)
+            }
+        }
+
         let op = TestCase01 {
             a: 1.,
             b: 1.,
             c: -2.,
         };
         let solver = Wegstein::<f64>::new();
-        let x = Executor::new(solver, op).terminate(Tolerance::new(1e-6)).run(2.).unwrap();
-        assert!(relative_eq!(f64::sqrt(2.), x))
+        let x = Executor::new(solver, op)
+            .report(DefaultReport::<TestCase01>::default())
+            .add_monitor(monitor::to_file("test.log")?)
+            .terminate(criteria::when(|report: &DefaultReport<_>| {
+                report.error < 1e-8
+            }))
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+
+        Ok(())
     }
 
     #[test]
-    fn case02_wegstein() {
+    fn case02_wegstein() -> anyhow::Result<()> {
         let op = |x: &f64| -> f64 { x * x + x - 2. };
         let solver = Wegstein::<f64>::new();
-        let x = Executor::new(solver, op).terminate(Tolerance::new(1e-6)).run(2.).unwrap();
-        assert!(relative_eq!(f64::sqrt(2.), x))
+        let x = Executor::new(solver, op)
+            .terminate(criteria::when(|report: &DefaultReport<_>| {
+                report.error < 1e-8
+            }))
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+
+        Ok(())
     }
 
     #[test]
-    fn case02_steffensen() {
+    fn case02_steffensen() -> anyhow::Result<()> {
         let op = |x: &f64| -> f64 { x * x + x - 2. };
         let solver = Steffensen::new();
-        let x = Executor::new(solver, op).terminate(Tolerance::new(1e-6)).run(2.).unwrap();
-        assert!(relative_eq!(f64::sqrt(2.), x))
+        let x = Executor::new(solver, op)
+            .terminate(criteria::when(|report: &DefaultReport<_>| {
+                report.error < 1e-8
+            }))
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+        Ok(())
     }
 }
