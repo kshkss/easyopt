@@ -1,3 +1,5 @@
+use crate::error::*;
+
 use num_traits::{One, Zero};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -78,8 +80,6 @@ where
 
 impl Extension<f32> for f32 {}
 impl Extension<f64> for f64 {}
-
-use crate::Error;
 
 pub trait Op {
     type Variable;

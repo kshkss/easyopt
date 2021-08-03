@@ -1,6 +1,6 @@
+/*
 use easyopt::Dual;
 
-/*
 use argmin_testfunctions::{rosenbrock_2d, rosenbrock_2d_derivative, rosenbrock_2d_hessian};
 use argmin::prelude::*;
 
@@ -40,5 +40,3 @@ impl ArgminOp for Rosenbrock {
     }
 }
 */
-
-

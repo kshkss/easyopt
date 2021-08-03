@@ -1,47 +1,9 @@
-use super::SelfConsistentOp;
+use super::{SelfConsistentOp, SelfConsistentOpSolver};
+use crate::error::*;
 use crate::traits::*;
-use crate::Error;
 use num_traits::One;
 use std::marker::PhantomData;
 //use std::ops::{Add, Div, Mul, Sub};
-
-pub trait SelfConsistentOpSolver<T>
-where
-    T: SelfConsistentOp,
-{
-    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
-}
-
-impl<S, T> Solver<T> for S
-where
-    T: SelfConsistentOp,
-    S: SelfConsistentOpSolver<T>,
-{
-    type ReportArg = T::Variable;
-
-    #[inline]
-    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
-        <Self as SelfConsistentOpSolver<T>>::next_iter(self, op, x)
-    }
-
-    #[inline]
-    fn init_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
-        &self,
-        report: &mut R,
-        x: &T::Variable,
-    ) -> Result<(), Error> {
-        report.init(x)
-    }
-
-    #[inline]
-    fn update_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
-        &self,
-        report: &mut R,
-        x: &T::Variable,
-    ) -> Result<(), Error> {
-        report.update(x)
-    }
-}
 
 pub struct Wegstein<T, K = f64> {
     y_prev: Option<T>,
@@ -105,76 +67,5 @@ where
         let y = y - &x;
         let x = x - &(&y * &y / &(z - &y));
         Ok(x)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::criteria;
-    use crate::monitor;
-    use crate::self_consistent::*;
-    use crate::Executor;
-    use approx::relative_eq;
-
-    #[test]
-    fn case01_wegstein() -> anyhow::Result<()> {
-        struct TestCase01 {
-            a: f64,
-            b: f64,
-            c: f64,
-        }
-        impl SelfConsistentOp for TestCase01 {
-            type Variable = f64;
-            fn apply(&self, x: &f64) -> Result<f64, Error> {
-                Ok(self.a * x * x + self.b * x + self.c)
-            }
-        }
-
-        let op = TestCase01 {
-            a: 1.,
-            b: 1.,
-            c: -2.,
-        };
-        let solver = Wegstein::<f64>::new();
-        let x = Executor::new(solver, op)
-            .report(DefaultReport::<TestCase01>::default())
-            .add_monitor(monitor::to_file("test.log")?)
-            .terminate(criteria::when(|report: &DefaultReport<_>| {
-                report.error < 1e-8
-            }))
-            .run(2.)?;
-        assert!(relative_eq!(f64::sqrt(2.), x));
-
-        Ok(())
-    }
-
-    #[test]
-    fn case02_wegstein() -> anyhow::Result<()> {
-        let op = |x: &f64| -> f64 { x * x + x - 2. };
-        let solver = Wegstein::<f64>::new();
-        let x = Executor::new(solver, op)
-            .add_monitor(monitor::to_file("case02_wegstein.log")?)
-            .terminate(criteria::when(|report: &DefaultReport<_>| {
-                report.error < 1e-8
-            }))
-            .run(2.)?;
-        assert!(relative_eq!(f64::sqrt(2.), x));
-
-        Ok(())
-    }
-
-    #[test]
-    fn case02_steffensen() -> anyhow::Result<()> {
-        let op = |x: &f64| -> f64 { x * x + x - 2. };
-        let solver = Steffensen::new();
-        let x = Executor::new(solver, op)
-            .terminate(criteria::when(|report: &DefaultReport<_>| {
-                report.error < 1e-8
-            }))
-            .add_monitor(monitor::to_file("case02_steffensen.log")?)
-            .run(2.)?;
-        assert!(relative_eq!(f64::sqrt(2.), x));
-        Ok(())
     }
 }

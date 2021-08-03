@@ -1,4 +1,4 @@
-use super::*;
+use crate::traits::*;
 use serde::Serialize;
 use std::fs::File;
 use std::io;

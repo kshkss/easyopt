@@ -1,5 +1,9 @@
-use crate::traits::*;
-use crate::Error;
+pub use crate::criteria::*;
+pub use crate::error::*;
+pub use crate::executor::*;
+pub use crate::monitor;
+pub use crate::traits::*;
+
 use num_traits::Zero;
 use serde::Serialize;
 
@@ -94,27 +98,125 @@ where
     }
 }
 
-pub mod solver;
-use solver::SelfConsistentOpSolver;
+pub trait SelfConsistentOpSolver<T>
+where
+    T: SelfConsistentOp,
+{
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
+}
 
-impl<S, O> super::Executor<S, O>
+impl<S, T> Solver<T> for S
+where
+    T: SelfConsistentOp,
+    S: SelfConsistentOpSolver<T>,
+{
+    type ReportArg = T::Variable;
+
+    #[inline]
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
+        <Self as SelfConsistentOpSolver<T>>::next_iter(self, op, x)
+    }
+
+    #[inline]
+    fn init_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.init(x)
+    }
+
+    #[inline]
+    fn update_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.update(x)
+    }
+}
+
+impl<S, O> Executor<S, O>
 where
     S: SelfConsistentOpSolver<O>,
     O: SelfConsistentOp,
     O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
     for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
 {
-    pub fn add_monitor<'a, F>(self, f: F) -> super::ExecutorStage1<'a, S, O, DefaultReport<O>>
+    pub fn add_monitor<'a, F>(self, f: F) -> ExecutorStage1<'a, S, O, DefaultReport<O>>
     where
         F: 'a + Monitor<DefaultReport<O>>,
     {
         self.report(Default::default()).add_monitor(f)
     }
 
-    pub fn terminate<'a, F>(self, c: F) -> super::ExecutorReady<'a, S, O, DefaultReport<O>, F>
+    pub fn terminate<'a, F>(self, c: F) -> ExecutorReady<'a, S, O, DefaultReport<O>, F>
     where
         F: Criteria<DefaultReport<O>>,
     {
         self.report(Default::default()).terminate(c)
+    }
+}
+
+pub mod solver;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use approx::relative_eq;
+
+    #[test]
+    fn case01_wegstein() -> anyhow::Result<()> {
+        struct TestCase01 {
+            a: f64,
+            b: f64,
+            c: f64,
+        }
+        impl SelfConsistentOp for TestCase01 {
+            type Variable = f64;
+            fn apply(&self, x: &f64) -> Result<f64, Error> {
+                Ok(self.a * x * x + self.b * x + self.c)
+            }
+        }
+
+        let op = TestCase01 {
+            a: 1.,
+            b: 1.,
+            c: -2.,
+        };
+        let solver = solver::Wegstein::<f64>::new();
+        let x = Executor::new(solver, op)
+            .report(DefaultReport::<TestCase01>::default())
+            .add_monitor(monitor::to_file("test.log")?)
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+
+        Ok(())
+    }
+
+    #[test]
+    fn case02_wegstein() -> anyhow::Result<()> {
+        let op = |x: &f64| -> f64 { x * x + x - 2. };
+        let solver = solver::Wegstein::<f64>::new();
+        let x = Executor::new(solver, op)
+            .add_monitor(monitor::to_file("case02_wegstein.log")?)
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+
+        Ok(())
+    }
+
+    #[test]
+    fn case02_steffensen() -> anyhow::Result<()> {
+        let op = |x: &f64| -> f64 { x * x + x - 2. };
+        let solver = solver::Steffensen::new();
+        let x = Executor::new(solver, op)
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .add_monitor(monitor::to_file("case02_steffensen.log")?)
+            .run(2.)?;
+        assert!(relative_eq!(f64::sqrt(2.), x));
+        Ok(())
     }
 }
