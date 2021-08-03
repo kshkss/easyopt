@@ -111,6 +111,14 @@ where
         }
         Ok(x)
     }
+
+    pub fn add_monitor<M>(mut self, f: M) -> Self
+    where
+        M: 'a + Monitor<T>,
+    {
+        self.monitor.push(Box::new(f));
+        self
+    }
 }
 
 pub mod criteria;

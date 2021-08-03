@@ -154,6 +154,7 @@ mod test {
         let op = |x: &f64| -> f64 { x * x + x - 2. };
         let solver = Wegstein::<f64>::new();
         let x = Executor::new(solver, op)
+            .add_monitor(monitor::to_file("case02_wegstein.log")?)
             .terminate(criteria::when(|report: &DefaultReport<_>| {
                 report.error < 1e-8
             }))
@@ -171,6 +172,7 @@ mod test {
             .terminate(criteria::when(|report: &DefaultReport<_>| {
                 report.error < 1e-8
             }))
+            .add_monitor(monitor::to_file("case02_steffensen.log")?)
             .run(2.)?;
         assert!(relative_eq!(f64::sqrt(2.), x));
         Ok(())
