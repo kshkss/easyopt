@@ -104,6 +104,13 @@ where
     O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
     for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
 {
+    pub fn add_monitor<'a, F>(self, f: F) -> super::ExecutorStage1<'a, S, O, DefaultReport<O>>
+    where
+        F: 'a + Monitor<DefaultReport<O>>,
+    {
+        self.report(Default::default()).add_monitor(f)
+    }
+
     pub fn terminate<'a, F>(self, c: F) -> super::ExecutorReady<'a, S, O, DefaultReport<O>, F>
     where
         F: Criteria<DefaultReport<O>>,
