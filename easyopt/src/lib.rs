@@ -124,33 +124,6 @@ where
 pub mod criteria;
 pub mod monitor;
 
-/*
-pub struct Tolerance {
-    e: f64,
-}
-
-impl Tolerance {
-    pub fn new(e: f64) -> Self {
-        Self { e: e }
-    }
-}
-
-impl Criteria for Tolerance {
-    type Variable = f64;
-    fn apply(&self, xnew: &f64, x: &f64) -> Result<(), f64> {
-        let diff = xnew - x;
-        if diff.is_nan() {
-            panic!();
-        }
-        if diff.abs() > self.e {
-            Err(diff)
-        } else {
-            Ok(())
-        }
-    }
-}
-*/
-
 #[cfg(test)]
 mod tests {
     #[test]
