@@ -23,7 +23,6 @@ pub struct ExecutorReady<'a, S, O, P, F> {
 impl<S, O> Executor<S, O>
 where
     S: Solver<O>,
-    O: Op,
 {
     pub fn new(solver: S, op: O) -> Self {
         Self { solver, op }
@@ -45,7 +44,6 @@ where
 impl<'a, S, O, T> ExecutorStage1<'a, S, O, T>
 where
     S: Solver<O>,
-    O: Op,
     T: Report<Arg = S::ReportArg>,
 {
     pub fn terminate<F>(self, c: F) -> ExecutorReady<'a, S, O, T, F>
@@ -74,11 +72,10 @@ where
 impl<'a, S, O, T, F> ExecutorReady<'a, S, O, T, F>
 where
     S: Solver<O>,
-    O: Op,
     T: Report<Arg = S::ReportArg>,
     F: Criteria<T>,
 {
-    pub fn run(&mut self, init: O::Variable) -> anyhow::Result<O::Variable> {
+    pub fn run(&mut self, init: S::Variable) -> anyhow::Result<S::Variable> {
         let mut x = init;
         self.solver.init_report(&mut self.report, &x)?;
         for f in self.monitor.iter_mut() {

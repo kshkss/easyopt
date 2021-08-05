@@ -1,4 +1,4 @@
-use super::{SelfConsistentOp, SelfConsistentOpSolver};
+use super::SelfConsistentOp;
 use crate::error::*;
 use crate::traits::*;
 use num_traits::One;
@@ -21,14 +21,16 @@ impl<T, F> Wegstein<T, F> {
     }
 }
 
-impl<T, U, F> SelfConsistentOpSolver<T> for Wegstein<U, F>
+impl<T, U, F> Solver<T> for Wegstein<U, F>
 where
-    T: Op<Variable = U> + SelfConsistentOp<Variable = <T as Op>::Variable>,
+    T: SelfConsistentOp<Variable = U>,
     F: One + BinaryOperand<U, U> + for<'a> BinaryOperand<&'a U, U>,
     for<'a> U: Clone + BinaryOperand<&'a U, U>,
     for<'a, 'b> &'a U: BinaryOperand<&'b U, U>,
 {
-    fn next_iter(&mut self, op: &T, x: &<T as Op>::Variable) -> Result<<T as Op>::Variable, Error> {
+    type Variable = T::Variable;
+    type ReportArg = T::Variable;
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
         let y = op.apply(&x)?;
         if let Some(y_prev) = self.y_prev.as_ref() {
             let x_prev = self.x_prev.as_ref().unwrap();
@@ -44,6 +46,21 @@ where
             Ok(y)
         }
     }
+    fn init_report<R: Report<Arg = T::Variable>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.init(x)
+    }
+
+    fn update_report<R: Report<Arg = T::Variable>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.update(x)
+    }
 }
 
 pub struct Steffensen;
@@ -54,18 +71,34 @@ impl Steffensen {
     }
 }
 
-impl<T> SelfConsistentOpSolver<T> for Steffensen
+impl<T> Solver<T> for Steffensen
 where
-    T: Op + SelfConsistentOp<Variable = <T as Op>::Variable>,
-    for<'a> <T as Op>::Variable: BinaryOperand<&'a <T as Op>::Variable, <T as Op>::Variable>,
-    for<'a, 'b> &'a <T as Op>::Variable:
-        BinaryOperand<&'b <T as Op>::Variable, <T as Op>::Variable>,
+    T: SelfConsistentOp,
+    for<'a> T::Variable: BinaryOperand<&'a T::Variable, T::Variable>,
+    for<'a, 'b> &'a T::Variable: BinaryOperand<&'b T::Variable, T::Variable>,
 {
-    fn next_iter(&mut self, op: &T, x: &<T as Op>::Variable) -> Result<<T as Op>::Variable, Error> {
+    type Variable = T::Variable;
+    type ReportArg = T::Variable;
+    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
         let y = op.apply(&x)?;
         let z = op.apply(&y)? - &y;
         let y = y - &x;
         let x = x - &(&y * &y / &(z - &y));
         Ok(x)
+    }
+    fn init_report<R: Report<Arg = T::Variable>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.init(x)
+    }
+
+    fn update_report<R: Report<Arg = T::Variable>>(
+        &self,
+        report: &mut R,
+        x: &T::Variable,
+    ) -> Result<(), Error> {
+        report.update(x)
     }
 }

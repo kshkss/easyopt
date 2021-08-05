@@ -12,13 +12,6 @@ pub trait SelfConsistentOp {
     fn apply(&self, x: &Self::Variable) -> Result<Self::Variable, Error>;
 }
 
-impl<T> Op for T
-where
-    T: SelfConsistentOp,
-{
-    type Variable = <T as SelfConsistentOp>::Variable;
-}
-
 /* Bad
 impl<T> SelfConsistentOp for dyn Fn(&T) -> T {
     type Variable = T;
@@ -98,47 +91,9 @@ where
     }
 }
 
-pub trait SelfConsistentOpSolver<T>
-where
-    T: SelfConsistentOp,
-{
-    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
-}
-
-impl<S, T> Solver<T> for S
-where
-    T: SelfConsistentOp,
-    S: SelfConsistentOpSolver<T>,
-{
-    type ReportArg = T::Variable;
-
-    #[inline]
-    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error> {
-        <Self as SelfConsistentOpSolver<T>>::next_iter(self, op, x)
-    }
-
-    #[inline]
-    fn init_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
-        &self,
-        report: &mut R,
-        x: &T::Variable,
-    ) -> Result<(), Error> {
-        report.init(x)
-    }
-
-    #[inline]
-    fn update_report<R: Report<Arg = <Self as Solver<T>>::ReportArg>>(
-        &self,
-        report: &mut R,
-        x: &T::Variable,
-    ) -> Result<(), Error> {
-        report.update(x)
-    }
-}
-
 impl<S, O> Executor<S, O>
 where
-    S: SelfConsistentOpSolver<O>,
+    S: Solver<O, Variable = O::Variable, ReportArg = O::Variable>,
     O: SelfConsistentOp,
     O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
     for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
