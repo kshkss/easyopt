@@ -91,6 +91,11 @@ where
     }
 }
 
+pub struct Executor<S, O> {
+    solver: S,
+    op: O,
+}
+
 impl<S, O> Executor<S, O>
 where
     S: Solver<O, Variable = O::Variable, ReportArg = O::Variable>,
@@ -98,6 +103,21 @@ where
     O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
     for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
 {
+    pub fn new(solver: S, op: O) -> Self {
+        Self { solver, op }
+    }
+
+    pub fn report<'a, T>(self, report: T) -> ExecutorStage1<'a, S, O, T>
+    where
+        T: Report<Arg = S::ReportArg>,
+    {
+        ExecutorStage1::<'a, S, O, T> {
+            solver: self.solver,
+            op: self.op,
+            report,
+            monitor: Vec::with_capacity(4),
+        }
+    }
     pub fn add_monitor<'a, F>(self, f: F) -> ExecutorStage1<'a, S, O, DefaultReport<O>>
     where
         F: 'a + Monitor<DefaultReport<O>>,

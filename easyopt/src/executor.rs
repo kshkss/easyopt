@@ -1,15 +1,10 @@
 use crate::traits::*;
 
-pub struct Executor<S, O> {
-    solver: S,
-    op: O,
-}
-
 pub struct ExecutorStage1<'a, S, O, P> {
-    solver: S,
-    op: O,
-    report: P,
-    monitor: Vec<Box<dyn 'a + Monitor<P>>>,
+    pub(crate) solver: S,
+    pub(crate) op: O,
+    pub(crate) report: P,
+    pub(crate) monitor: Vec<Box<dyn 'a + Monitor<P>>>,
 }
 
 pub struct ExecutorReady<'a, S, O, P, F> {
@@ -18,27 +13,6 @@ pub struct ExecutorReady<'a, S, O, P, F> {
     report: P,
     monitor: Vec<Box<dyn 'a + Monitor<P>>>,
     criteria: F,
-}
-
-impl<S, O> Executor<S, O>
-where
-    S: Solver<O>,
-{
-    pub fn new(solver: S, op: O) -> Self {
-        Self { solver, op }
-    }
-
-    pub fn report<'a, T>(self, report: T) -> ExecutorStage1<'a, S, O, T>
-    where
-        T: Report<Arg = S::ReportArg>,
-    {
-        ExecutorStage1::<'a, S, O, T> {
-            solver: self.solver,
-            op: self.op,
-            report,
-            monitor: Vec::with_capacity(4),
-        }
-    }
 }
 
 impl<'a, S, O, T> ExecutorStage1<'a, S, O, T>
