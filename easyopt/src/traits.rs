@@ -85,22 +85,25 @@ pub trait Solver<T> {
     type Variable;
     type ReportArg;
     fn next_iter(&mut self, op: &T, x: &Self::Variable) -> Result<Self::Variable, Error>;
-    fn init_report<R: Report<Arg = Self::ReportArg>>(
+    fn init_report<R: Report<Arg = Self::ReportArg, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &Self::Variable,
     ) -> Result<(), Error>;
-    fn update_report<R: Report<Arg = Self::ReportArg>>(
+    fn update_report<R: Report<Arg = Self::ReportArg, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &Self::Variable,
     ) -> Result<(), Error>;
 }
 
 pub trait Report {
     type Arg;
-    fn init(&mut self, s: &Self::Arg) -> Result<(), Error>;
-    fn update(&mut self, s: &Self::Arg) -> Result<(), Error>;
+    type Op;
+    fn init(&mut self, op: &Self::Op, s: &Self::Arg) -> Result<(), Error>;
+    fn update(&mut self, op: &Self::Op, s: &Self::Arg) -> Result<(), Error>;
 }
 
 pub trait Monitor<T>: FnMut(&T) -> anyhow::Result<()> {}

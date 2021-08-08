@@ -46,19 +46,19 @@ where
 impl<'a, S, O, T, F> ExecutorReady<'a, S, O, T, F>
 where
     S: Solver<O>,
-    T: Report<Arg = S::ReportArg>,
+    T: Report<Arg = S::ReportArg, Op = O>,
     F: Criteria<T>,
 {
     pub fn run(&mut self, init: S::Variable) -> anyhow::Result<S::Variable> {
         let mut x = init;
-        self.solver.init_report(&mut self.report, &x)?;
+        self.solver.init_report(&mut self.report, &self.op, &x)?;
         for f in self.monitor.iter_mut() {
             f(&self.report)?;
         }
         let mut res = (self.criteria)(&self.report);
         while res.is_err() {
             x = self.solver.next_iter(&self.op, &x)?;
-            self.solver.update_report(&mut self.report, &x)?;
+            self.solver.update_report(&mut self.report, &self.op, &x)?;
             for f in self.monitor.iter_mut() {
                 f(&self.report)?
             }

@@ -58,8 +58,9 @@ where
     for<'a, 'b> &'b T::Variable: Clone + BinaryOperand<&'a T::Variable, T::Variable>,
 {
     type Arg = T::Variable;
+    type Op = T;
 
-    fn init(&mut self, x: &Self::Arg) -> Result<(), Error> {
+    fn init(&mut self, _op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
         self.count = 0;
         self.current = x.clone();
         self.error = Float::nan();
@@ -67,7 +68,7 @@ where
         Ok(())
     }
 
-    fn update(&mut self, x: &Self::Arg) -> Result<(), Error> {
+    fn update(&mut self, _op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
         let prev = std::mem::replace(&mut self.current, x.clone());
         self.error = (&self.current - &prev).abs() / &prev;
         self.prev = Some(prev);
@@ -109,7 +110,7 @@ where
 
     pub fn report<'a, T>(self, report: T) -> ExecutorStage1<'a, S, O, T>
     where
-        T: Report<Arg = S::ReportArg>,
+        T: Report<Arg = S::ReportArg, Op = O>,
     {
         ExecutorStage1::<'a, S, O, T> {
             solver: self.solver,
@@ -118,6 +119,7 @@ where
             monitor: Vec::with_capacity(4),
         }
     }
+
     pub fn add_monitor<'a, F>(self, f: F) -> ExecutorStage1<'a, S, O, DefaultReport<O>>
     where
         F: 'a + Monitor<DefaultReport<O>>,

@@ -46,20 +46,22 @@ where
             Ok(y)
         }
     }
-    fn init_report<R: Report<Arg = T::Variable>>(
+    fn init_report<R: Report<Arg = T::Variable, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &T::Variable,
     ) -> Result<(), Error> {
-        report.init(x)
+        report.init(op, x)
     }
 
-    fn update_report<R: Report<Arg = T::Variable>>(
+    fn update_report<R: Report<Arg = T::Variable, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &T::Variable,
     ) -> Result<(), Error> {
-        report.update(x)
+        report.update(op, x)
     }
 }
 
@@ -86,19 +88,21 @@ where
         let x = x - &(&y * &y / &(z - &y));
         Ok(x)
     }
-    fn init_report<R: Report<Arg = T::Variable>>(
+    fn init_report<R: Report<Arg = T::Variable, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &T::Variable,
     ) -> Result<(), Error> {
-        report.init(x)
+        report.init(op, x)
     }
 
-    fn update_report<R: Report<Arg = T::Variable>>(
+    fn update_report<R: Report<Arg = T::Variable, Op = T>>(
         &self,
         report: &mut R,
+        op: &T,
         x: &T::Variable,
     ) -> Result<(), Error> {
-        report.update(x)
+        report.update(op, x)
     }
 }
