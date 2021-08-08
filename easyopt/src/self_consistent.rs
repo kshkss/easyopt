@@ -8,6 +8,7 @@ use num_traits::Zero;
 use serde::Serialize;
 
 pub trait SelfConsistentOp {
+    type Scalar;
     type Variable;
     fn apply(&self, x: &Self::Variable) -> Result<Self::Variable, Error>;
 }
@@ -33,6 +34,7 @@ impl<F> SelfConsistentOp for F
 where
     F: Fn(&f64) -> f64,
 {
+    type Scalar = f64;
     type Variable = f64;
     fn apply(&self, x: &f64) -> Result<f64, Error> {
         Ok(self(x))
@@ -150,6 +152,7 @@ mod test {
             c: f64,
         }
         impl SelfConsistentOp for TestCase01 {
+            type Scalar = f64;
             type Variable = f64;
             fn apply(&self, x: &f64) -> Result<f64, Error> {
                 Ok(self.a * x * x + self.b * x + self.c)
@@ -161,7 +164,7 @@ mod test {
             b: 1.,
             c: -2.,
         };
-        let solver = solver::Wegstein::<f64>::new();
+        let solver = solver::Wegstein::new();
         let x = Executor::new(solver, op)
             .report(DefaultReport::<TestCase01>::default())
             .add_monitor(monitor::to_file("test.log")?)
@@ -175,7 +178,7 @@ mod test {
     #[test]
     fn case02_wegstein() -> anyhow::Result<()> {
         let op = |x: &f64| -> f64 { x * x + x - 2. };
-        let solver = solver::Wegstein::<f64>::new();
+        let solver = solver::Wegstein::new();
         let x = Executor::new(solver, op)
             .add_monitor(monitor::to_file("case02_wegstein.log")?)
             .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))

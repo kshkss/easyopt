@@ -2,29 +2,26 @@ use super::SelfConsistentOp;
 use crate::error::*;
 use crate::traits::*;
 use num_traits::One;
-use std::marker::PhantomData;
 //use std::ops::{Add, Div, Mul, Sub};
 
-pub struct Wegstein<T, K = f64> {
+pub struct Wegstein<T> {
     y_prev: Option<T>,
     x_prev: Option<T>,
-    _scalar_type: PhantomData<K>,
 }
 
-impl<T, F> Wegstein<T, F> {
+impl<T> Wegstein<T> {
     pub fn new() -> Self {
         Self {
             y_prev: None,
             x_prev: None,
-            _scalar_type: PhantomData,
         }
     }
 }
 
-impl<T, U, F> Solver<T> for Wegstein<U, F>
+impl<T, U> Solver<T> for Wegstein<U>
 where
     T: SelfConsistentOp<Variable = U>,
-    F: One + BinaryOperand<U, U> + for<'a> BinaryOperand<&'a U, U>,
+    T::Scalar: One + BinaryOperand<U, U> + for<'a> BinaryOperand<&'a U, U>,
     for<'a> U: Clone + BinaryOperand<&'a U, U>,
     for<'a, 'b> &'a U: BinaryOperand<&'b U, U>,
 {
@@ -35,8 +32,8 @@ where
         if let Some(y_prev) = self.y_prev.as_ref() {
             let x_prev = self.x_prev.as_ref().unwrap();
             let s = (&y - &y_prev) / &(x - &x_prev);
-            let t = F::one() / (F::one() - &s);
-            let next = (&t * &y) + &((F::one() - &t) * &x);
+            let t = T::Scalar::one() / (T::Scalar::one() - &s);
+            let next = (&t * &y) + &((T::Scalar::one() - &t) * &x);
             self.x_prev.replace(x.clone());
             self.y_prev.replace(y);
             Ok(next)
