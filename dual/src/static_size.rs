@@ -1,5 +1,6 @@
 use ndarray::prelude::*;
-use num_traits::{One, Zero};
+use num_traits::{One, Zero, Float};
+use crate::traits::*;
 
 #[derive(Debug, Clone)]
 pub struct Dual<T, const N: usize> {
@@ -161,6 +162,50 @@ where
 
     fn is_one(&self) -> bool {
         self.x == T::one()
+    }
+}
+
+impl<T, const N: usize> NaN for Dual<T, N>
+where
+    T: Float,
+{
+    fn nan() -> Self {
+        Self {
+            x: T::nan(),
+            dx: [T::nan(); N],
+        }
+    }
+
+    fn is_nan(&self) -> bool {
+        self.x.is_nan()
+    }
+}
+
+
+impl<T, const N: usize> Inf for Dual<T, N>
+where
+    T: Float,
+{
+    fn infinity() -> Self {
+        Self {
+            x: T::infinity(),
+            dx: [T::nan(); N],
+        }
+    }
+
+    fn neg_infinity() -> Self {
+        Self {
+            x: T::neg_infinity(),
+            dx: [T::nan(); N],
+        }
+    }
+
+     fn is_finite(&self) -> bool {
+        self.x.is_finite()
+    }
+
+     fn is_infinite(&self) -> bool {
+        self.x.is_infinite()
     }
 }
 
