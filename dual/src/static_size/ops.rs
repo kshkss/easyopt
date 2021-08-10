@@ -289,7 +289,7 @@ where
     type Output = Dual<T, N>;
     fn div(mut self, rhs: &Self) -> Self::Output {
         for (dst, src) in self.dx.iter_mut().zip(rhs.dx) {
-            *dst = *dst * rhs.x - src * self.x / (rhs.x * rhs.x);
+            *dst = *dst / rhs.x - src * self.x / (rhs.x * rhs.x);
         }
         self.x = self.x / rhs.x;
         self
