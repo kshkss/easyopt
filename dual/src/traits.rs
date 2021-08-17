@@ -67,7 +67,7 @@ pub trait ElementaryFunction {
 
     fn sqrt(&self) -> Self;
     fn cbrt(&self) -> Self;
-    fn powf(&self, n: Self) -> Self;
+    fn powf(&self, n: &Self) -> Self;
     fn powi(&self, n: i32) -> Self;
 
     fn exp(&self) -> Self;
@@ -77,7 +77,7 @@ pub trait ElementaryFunction {
     fn ln(&self) -> Self;
     fn log10(&self) -> Self;
     fn log2(&self) -> Self;
-    fn log(&self, base: Self) -> Self;
+    fn log(&self, base: &Self) -> Self;
     fn ln_1p(&self) -> Self;
 
     fn cos(&self) -> Self;

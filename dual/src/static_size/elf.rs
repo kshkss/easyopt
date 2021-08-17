@@ -67,19 +67,7 @@ where
             T::from_i32(n).unwrap() * self.x.powi(n - 1)
         );
     }
-    fn powf(&self, n: Self) -> Self {
-        /*
-        let mut new = Self {
-            x: self.x.powf(n.x),
-            ..self.clone()
-        };
-        let a = new.x * self.x.ln();
-        let b = new.x * n.x / self.x;
-        for (dx, dx2) in new.dx.iter_mut().zip(n.dx.iter()) {
-            *dx = a * *dx + b * *dx2;
-        }
-        new
-            */
+    fn powf(&self, n: &Self) -> Self {
         binary!(
             self,
             n,
@@ -126,7 +114,7 @@ where
             (T::from_i32(2).unwrap().ln() * self.x).recip()
         );
     }
-    fn log(&self, base: Self) -> Self {
+    fn log(&self, base: &Self) -> Self {
         binary!(
             self,
             base,
