@@ -88,34 +88,6 @@ where
 }
 
 /*
-impl<T, const N: usize> From<Dual<T, N>> for T
-{
-    fn from(item: Dual<T, N>) -> T {
-        item.x
-    }
-}
-
-impl<T, const N: usize> Into<T> for Dual<T, N>
-{
-    fn into(self) -> T {
-        self.x
-    }
-}
-*/
-
-impl<const N: usize> From<Dual<f64, N>> for f64 {
-    fn from(item: Dual<f64, N>) -> f64 {
-        item.x
-    }
-}
-
-impl<const N: usize> From<&Dual<f64, N>> for f64 {
-    fn from(item: &Dual<f64, N>) -> f64 {
-        item.x
-    }
-}
-
-/*
 impl<T, U, const N: usize> From<Dual<T, N>> for Dual<U, N>
 where
     U: From<T>,
