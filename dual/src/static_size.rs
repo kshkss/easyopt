@@ -1,6 +1,6 @@
-use ndarray::prelude::*;
-use num_traits::{One, Zero, Float, Num, FromPrimitive};
 use crate::traits::*;
+use ndarray::prelude::*;
+use num_traits::{Float, FromPrimitive, Num, One, Zero};
 
 #[derive(Debug, Clone)]
 pub struct Dual<T, const N: usize> {
@@ -150,87 +150,9 @@ where
 }
 */
 
-mod ops;
-
-impl<T, const N: usize> Zero for Dual<T, N>
-where
-    T: Zero + Copy + PartialEq<T>,
-{
-    fn zero() -> Self {
-        Self {
-            x: T::zero(),
-            dx: [T::zero(); N],
-        }
-    }
-
-    fn is_zero(&self) -> bool {
-        self.x == T::zero()
-    }
-
-    fn set_zero(&mut self) {
-        self.x = T::zero();
-        for dst in self.dx.iter_mut() {
-            *dst = T::zero();
-        }
-    }
-}
-
-impl<T, const N: usize> One for Dual<T, N>
-where
-    T: Zero + One + PartialEq<T> + Copy,
-{
-    fn one() -> Self {
-        Self {
-            x: T::one(),
-            dx: [T::zero(); N],
-        }
-    }
-
-    fn set_one(&mut self) {
-        self.x = T::one();
-        for dst in self.dx.iter_mut() {
-            *dst = T::one();
-        }
-    }
-
-    fn is_one(&self) -> bool {
-        self.x == T::one()
-    }
-}
-
-impl<T, const N: usize> Num for Dual<T, N>
-where
-    T: Num + Copy,
-{
-    type FromStrRadixErr = T::FromStrRadixErr;
-
-    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        let x = T::from_str_radix(str, radix)?;
-        Ok(Self{
-            x,
-            dx: [T::zero(); N]
-        })
-    }
-}
-
-impl<T, const N: usize> FromPrimitive for Dual<T, N>
-where
-    T: FromPrimitive + Copy
-{
-    fn from_i64(n: i64) -> Option<Self> {
-        Some(Self {
-            x: T::from_i64(n)?,
-            dx: [T::from_i64(0)?; N],
-        })
-    }
-
-    fn from_u64(n: u64) -> Option<Self> {
-        Some(Self {
-            x: T::from_u64(n)?,
-            dx: [T::from_u64(0)?; N],
-        })
-    }
-}
+mod from_primitive;
+mod num;
+mod num_ops;
 
 impl<T, const N: usize> NaN for Dual<T, N>
 where
@@ -247,7 +169,6 @@ where
         self.x.is_nan()
     }
 }
-
 
 impl<T, const N: usize> Inf for Dual<T, N>
 where
@@ -267,11 +188,11 @@ where
         }
     }
 
-     fn is_finite(&self) -> bool {
+    fn is_finite(&self) -> bool {
         self.x.is_finite()
     }
 
-     fn is_infinite(&self) -> bool {
+    fn is_infinite(&self) -> bool {
         self.x.is_infinite()
     }
 }

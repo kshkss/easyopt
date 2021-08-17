@@ -1,53 +1,8 @@
+use num_traits::{Num, NumAssignOps, NumOps};
 use num_traits::{One, Zero};
-use std::cmp::Ordering;
-use std::ops::{Add, Div, Mul, Neg, Sub, Rem};
-use num_traits::{Num, NumOps, NumAssignOps};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use super::Dual;
-
-impl<T, const N: usize> PartialEq<Self> for Dual<T, N>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.x.eq(&other.x)
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.x.ne(&other.x)
-    }
-}
-
-impl<T, const N: usize> PartialEq<T> for Dual<T, N>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &T) -> bool {
-        self.x.eq(&other)
-    }
-
-    fn ne(&self, other: &T) -> bool {
-        self.x.ne(&other)
-    }
-}
-
-impl<T, const N: usize> PartialOrd<Self> for Dual<T, N>
-where
-    T: PartialOrd,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.x.partial_cmp(&other.x)
-    }
-}
-
-impl<T, const N: usize> PartialOrd<T> for Dual<T, N>
-where
-    T: PartialOrd,
-{
-    fn partial_cmp(&self, other: &T) -> Option<Ordering> {
-        self.x.partial_cmp(&other)
-    }
-}
 
 impl<T, const N: usize> Add<&Self> for Dual<T, N>
 where
