@@ -1,4 +1,4 @@
-use num_traits::{Float};
+use num_traits::Float;
 use std::ops::{Add, Div, Mul, Sub};
 
 pub trait NaN {
@@ -7,7 +7,8 @@ pub trait NaN {
 }
 
 impl<T> NaN for T
-where T: Float
+where
+    T: Float,
 {
     fn nan() -> Self {
         Float::nan()
@@ -26,7 +27,8 @@ pub trait Inf {
 }
 
 impl<T> Inf for T
-where T: Float
+where
+    T: Float,
 {
     fn infinity() -> Self {
         Float::infinity()

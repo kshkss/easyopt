@@ -271,7 +271,11 @@ mod tests {
         );
         assert_id!(x.powf(&z) * x.powf(&z), x.powf(&(&z + &z)));
         assert_id!(x.powf(&z).powf(&z), x.powf(&(&z * &z)));
-        assert_id!(x.sqrt() * x.cbrt(), x.powf(&Dual::<f64, 2>::constant(5./6.)), epsilon = f64::EPSILON * 10.);
+        assert_id!(
+            x.sqrt() * x.cbrt(),
+            x.powf(&Dual::<f64, 2>::constant(5. / 6.)),
+            epsilon = f64::EPSILON * 10.
+        );
 
         Ok(())
     }
