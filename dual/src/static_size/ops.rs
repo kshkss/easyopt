@@ -1,6 +1,7 @@
 use num_traits::{One, Zero};
 use std::cmp::Ordering;
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub, Rem};
+use num_traits::{Num, NumOps, NumAssignOps};
 
 use super::Dual;
 
@@ -350,6 +351,78 @@ where
     type Output = Dual<T, N>;
     #[inline]
     fn div(self, rhs: T) -> Self::Output {
+        self.clone() / rhs
+    }
+}
+
+impl<T, const N: usize> Rem<&Self> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    fn rem(mut self, rhs: &Self) -> Self::Output {
+        for (dst, src) in self.dx.iter_mut().zip(rhs.dx) {
+            *dst = todo!();
+        }
+        self.x = self.x % rhs.x;
+        self
+    }
+}
+
+impl<T, const N: usize> Rem<Self> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: Self) -> Self::Output {
+        self / &rhs
+    }
+}
+
+impl<'a, 'b, T, const N: usize> Rem<&'a Dual<T, N>> for &'b Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: &'a Dual<T, N>) -> Self::Output {
+        self.clone() / rhs
+    }
+}
+
+impl<T, const N: usize> Rem<Dual<T, N>> for &Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: Dual<T, N>) -> Self::Output {
+        self.clone() / &rhs
+    }
+}
+
+impl<T, const N: usize> Rem<T> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    fn rem(mut self, rhs: T) -> Self::Output {
+        for dst in self.dx.iter_mut() {
+            *dst = *dst / rhs;
+        }
+        self.x = self.x / rhs;
+        self
+    }
+}
+
+impl<T, const N: usize> Rem<T> for &Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: T) -> Self::Output {
         self.clone() / rhs
     }
 }

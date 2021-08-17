@@ -1,5 +1,5 @@
 use ndarray::prelude::*;
-use num_traits::{One, Zero, Float};
+use num_traits::{One, Zero, Float, Num, FromPrimitive};
 use crate::traits::*;
 
 #[derive(Debug, Clone)]
@@ -7,6 +7,15 @@ pub struct Dual<T, const N: usize> {
     x: T,
     dx: [T; N],
 }
+
+impl<T: Copy> Copy for Dual<T, 1> {}
+pub type Var1<T> = Dual<T, 1>;
+
+impl<T: Copy> Copy for Dual<T, 2> {}
+pub type Var2<T> = Dual<T, 2>;
+
+impl<T: Copy> Copy for Dual<T, 3> {}
+pub type Var3<T> = Dual<T, 3>;
 
 impl<T, const N: usize> Dual<T, N>
 where
@@ -49,6 +58,30 @@ where
     fn default() -> Self {
         Self {
             x: T::default(),
+            dx: [T::zero(); N],
+        }
+    }
+}
+
+impl<T, const N: usize> From<T> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    fn from(x: T) -> Self {
+        Self {
+            x,
+            dx: [T::zero(); N],
+        }
+    }
+}
+
+impl<'a, T, const N: usize> From<&'a T> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    fn from(item: &'a T) -> Self {
+        Self {
+            x: item.clone(),
             dx: [T::zero(); N],
         }
     }
@@ -162,6 +195,40 @@ where
 
     fn is_one(&self) -> bool {
         self.x == T::one()
+    }
+}
+
+impl<T, const N: usize> Num for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type FromStrRadixErr = T::FromStrRadixErr;
+
+    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        let x = T::from_str_radix(str, radix)?;
+        Ok(Self{
+            x,
+            dx: [T::zero(); N]
+        })
+    }
+}
+
+impl<T, const N: usize> FromPrimitive for Dual<T, N>
+where
+    T: FromPrimitive + Copy
+{
+    fn from_i64(n: i64) -> Option<Self> {
+        Some(Self {
+            x: T::from_i64(n)?,
+            dx: [T::from_i64(0)?; N],
+        })
+    }
+
+    fn from_u64(n: u64) -> Option<Self> {
+        Some(Self {
+            x: T::from_u64(n)?,
+            dx: [T::from_u64(0)?; N],
+        })
     }
 }
 
