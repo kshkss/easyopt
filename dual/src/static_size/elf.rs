@@ -185,12 +185,12 @@ mod tests {
     use approx::assert_relative_eq;
 
     macro_rules! assert_id {
-        ($e1: expr, $e2: expr) => {
+        ($e1: expr, $e2: expr $(, $opt:ident = $val:expr)*) => {
             let a = $e1;
             let b = $e2;
-            assert_relative_eq!(*a.val(), *b.val());
+            assert_relative_eq!(*a.val(), *b.val() $(, $opt = $val)*);
             for (&dx1, &dx2) in a.grad().iter().zip(b.grad().iter()) {
-                assert_relative_eq!(dx1, dx2);
+                assert_relative_eq!(dx1, dx2 $(, $opt = $val)* );
             }
         };
     }
@@ -208,6 +208,10 @@ mod tests {
         let x = Dual::<f64, 1>::new(0, 3.0).recip();
         assert_relative_eq!(1.0 / 3.0, *x.val());
         assert_relative_eq!(-1.0 / 9.0, x.grad()[0]);
+
+        assert_id!(x.recip() * &x, Dual::<f64, 1>::constant(1.));
+        assert_id!(x.recip().recip(), &x);
+        assert_id!(&x / x.recip(), &x * &x);
         Ok(())
     }
 
@@ -216,53 +220,58 @@ mod tests {
         let x = Dual::<f64, 1>::new(0, 3.0).sqrt();
         assert_relative_eq!(f64::sqrt(3.0), *x.val());
         assert_relative_eq!(0.5 / f64::sqrt(3.0), x.grad()[0]);
+
+        assert_id!(x.sqrt() * x.sqrt(), &x);
+        assert_id!(x.sqrt() / &x, x.sqrt().recip());
+        Ok(())
+    }
+
+    #[test]
+    fn powi() -> anyhow::Result<()> {
+        let x = Dual::<f64, 2>::new(0, 0.5);
+        assert_id!(x.powi(2) * x.powi(3), x.powi(5));
+        assert_id!(x.powi(2) * x.powi(-3), x.powi(-1));
+        assert_id!(x.powi(2) / x.powi(3), x.powi(-1));
+        assert_id!(x.powi(2) / x.powi(-3), x.powi(5));
+        assert_id!(x.sqrt().powi(2), &x);
+        assert_id!(x.powi(2).sqrt(), &x);
+        assert_id!(x.recip().powi(-1), &x);
+        assert_id!(x.powi(-1).recip(), &x);
+
+        Ok(())
+    }
+
+    #[test]
+    fn cbrt() -> anyhow::Result<()> {
+        let x = Dual::<f64, 2>::new(0, 0.5);
+        assert_id!(x.cbrt().powi(3), &x);
+        assert_id!(x.powi(3).cbrt(), &x);
+        assert_id!(x.cbrt().powi(2), &x / x.cbrt());
+        assert_id!(x.cbrt().powi(2), &x * x.cbrt().recip());
+
         Ok(())
     }
 
     #[test]
     fn powf() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, f64::exp(1.)).powf(Dual::<f64, 2>::new(1, 2.0));
+        let x = Dual::<f64, 2>::new(0, f64::exp(1.)).powf(&Dual::<f64, 2>::new(1, 2.0));
         assert_relative_eq!(f64::exp(2.), *x.val());
         assert_relative_eq!(2. * f64::exp(1.), x.grad()[0]);
         assert_relative_eq!(f64::exp(2.), x.grad()[1]);
 
-        let y = Dual::<f64, 1>::new(0, f64::exp(1.)).powf(Dual::<f64, 1>::new(0, 2.0));
+        let y = Dual::<f64, 1>::new(0, f64::exp(1.)).powf(&Dual::<f64, 1>::new(0, 2.0));
         assert_relative_eq!(y.grad()[0], x.grad()[0] + x.grad()[1]);
 
-        Ok(())
-    }
-
-    #[test]
-    fn sqrt_powi() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        assert_id!(x.sqrt().powi(2), &x);
-        assert_id!(x.powi(2).sqrt(), x);
-
-        Ok(())
-    }
-
-    #[test]
-    fn sqrt_ln() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        assert_id!(x.sqrt().ln(), x.ln() * 0.5);
-
-        Ok(())
-    }
-
-
-    #[test]
-    fn cbrt_powi() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        assert_id!(x.cbrt().powi(3), &x);
-        assert_id!(x.powi(3).cbrt(), x);
-
-        Ok(())
-    }
-
-    #[test]
-    fn cbrt_ln() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        assert_id!(x.cbrt().ln(), x.ln() / 3.);
+        let x = Dual::<f64, 2>::new(0, 2.);
+        let z = Dual::<f64, 2>::new(1, f64::exp(1.));
+        assert_id!(x.powf(&z.negate()), x.powf(&z).recip());
+        assert_id!(
+            x.powf(&z) * x.powf(&z.negate()),
+            Dual::<f64, 2>::constant(1.)
+        );
+        assert_id!(x.powf(&z) * x.powf(&z), x.powf(&(&z + &z)));
+        assert_id!(x.powf(&z).powf(&z), x.powf(&(&z * &z)));
+        assert_id!(x.sqrt() * x.cbrt(), x.powf(&Dual::<f64, 2>::constant(5./6.)), epsilon = f64::EPSILON * 10.);
 
         Ok(())
     }
@@ -272,15 +281,7 @@ mod tests {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
         assert_id!((&x + &y).exp(), x.exp() * y.exp());
-
-        Ok(())
-    }
-
-    #[test]
-    fn exp_powf() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        let y = Dual::<f64, 2>::new(1, 1.5);
-        assert_id!((&x * &y).exp(), x.exp().powf(y));
+        assert_id!((&x * &y).exp(), x.exp().powf(&y));
 
         Ok(())
     }
@@ -290,15 +291,7 @@ mod tests {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
         assert_id!((&x + &y).exp2(), x.exp2() * y.exp2());
-
-        Ok(())
-    }
-
-    #[test]
-    fn exp2_powf() -> anyhow::Result<()> {
-        let x = Dual::<f64, 2>::new(0, 0.5);
-        let y = Dual::<f64, 2>::new(1, 1.5);
-        assert_id!((&x * &y).exp2(), x.exp2().powf(y));
+        assert_id!((&x * &y).exp2(), x.exp2().powf(&y));
 
         Ok(())
     }
@@ -307,8 +300,12 @@ mod tests {
     fn ln() -> anyhow::Result<()> {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
+        assert_id!(x.ln().exp(), &x);
+        assert_id!(x.exp().ln(), &x);
         assert_id!((&x * &y).ln(), x.ln() + y.ln());
-        assert_id!(&y * x.ln(), x.powf(y).ln());
+        assert_id!(&y * x.ln(), x.powf(&y).ln());
+        assert_id!(x.sqrt().ln(), x.ln() * 0.5);
+        assert_id!(x.cbrt().ln(), x.ln() / 3.);
 
         Ok(())
     }
@@ -317,8 +314,10 @@ mod tests {
     fn log2() -> anyhow::Result<()> {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
+        assert_id!(x.log2().exp2(), &x);
+        assert_id!(x.exp2().log2(), &x);
         assert_id!((&x * &y).log2(), x.log2() + y.log2());
-        assert_id!(&y * x.log2(), x.powf(y).log2());
+        assert_id!(&y * x.log2(), x.powf(&y).log2());
 
         Ok(())
     }
@@ -328,7 +327,7 @@ mod tests {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
         assert_id!((&x * &y).log10(), x.log10() + y.log10());
-        assert_id!(&y * x.log10(), x.powf(y).log10());
+        assert_id!(&y * x.log10(), x.powf(&y).log10());
 
         Ok(())
     }
@@ -337,23 +336,7 @@ mod tests {
     fn log() -> anyhow::Result<()> {
         let x = Dual::<f64, 2>::new(0, 0.5);
         let y = Dual::<f64, 2>::new(1, 1.5);
-        assert_id!(x.ln() / y.ln(), x.log(y));
-
-        Ok(())
-    }
-
-    #[test]
-    fn ln_exp() -> anyhow::Result<()> {
-        let x = Dual::<f64, 1>::new(0, 0.5);
-        assert_id!(x.ln().exp(), x);
-
-        Ok(())
-    }
-
-    #[test]
-    fn log2_exp2() -> anyhow::Result<()> {
-        let x = Dual::<f64, 1>::new(0, 0.5);
-        assert_id!(x.log2().exp2(), x);
+        assert_id!(x.ln() / y.ln(), x.log(&y));
 
         Ok(())
     }
@@ -365,6 +348,10 @@ mod tests {
             x.sin().powi(2) + x.cos() * x.cos(),
             Dual::<f64, 1>::constant(1.)
         );
+        assert_id!((&x * 2.).sin(), x.sin() * x.cos() * 2.);
+        assert_id!((&x * 2.).cos(), x.cos().powi(2) - x.sin().powi(2));
+        assert_id!((&x * 0.5).sin().powi(2), (x.cos().negate() + 1.) * 0.5);
+        assert_id!((&x * 0.5).cos().powi(2), (x.cos() + 1.) * 0.5);
 
         Ok(())
     }
@@ -382,6 +369,18 @@ mod tests {
         let x = Dual::<f64, 1>::new(0, 0.5).asin();
         assert_relative_eq!(f64::asin(0.5), *x.val());
         assert_relative_eq!(1. / (1. - 0.5 * 0.5).sqrt(), x.grad()[0]);
+
+        assert_id!(x.sin().asin(), &x);
+        assert_id!(x.asin().sin(), &x);
+        Ok(())
+    }
+
+    #[test]
+    fn acos() -> anyhow::Result<()> {
+        let x = Dual::<f64, 1>::new(0, 0.5).asin();
+
+        assert_id!(x.cos().acos(), &x);
+        assert_id!(x.acos().cos(), &x);
         Ok(())
     }
 
@@ -392,6 +391,8 @@ mod tests {
             x.cosh().powi(2) - x.sinh() * x.sinh(),
             Dual::<f64, 1>::constant(1.)
         );
+        assert_id!(x.sinh(), (x.exp() - x.negate().exp()) * 0.5);
+        assert_id!(x.cosh(), (x.exp() + x.negate().exp()) * 0.5);
         Ok(())
     }
 
