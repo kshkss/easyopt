@@ -315,6 +315,9 @@ where
     T: Num + Copy,
 {
     type Output = Dual<T, N>;
+
+    //The remainder has the same sign as the dividend and is computed as:
+    // `x - (x / y).trunc() * y`.
     fn rem(mut self, rhs: &Self) -> Self::Output {
         for (dst, src) in self.dx.iter_mut().zip(rhs.dx) {
             *dst = todo!();
@@ -331,7 +334,7 @@ where
     type Output = Dual<T, N>;
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
-        self / &rhs
+        self % &rhs
     }
 }
 
@@ -342,7 +345,7 @@ where
     type Output = Dual<T, N>;
     #[inline]
     fn rem(self, rhs: &'a Dual<T, N>) -> Self::Output {
-        self.clone() / rhs
+        self.clone() % rhs
     }
 }
 
@@ -353,7 +356,7 @@ where
     type Output = Dual<T, N>;
     #[inline]
     fn rem(self, rhs: Dual<T, N>) -> Self::Output {
-        self.clone() / &rhs
+        self.clone() % &rhs
     }
 }
 
@@ -364,9 +367,9 @@ where
     type Output = Dual<T, N>;
     fn rem(mut self, rhs: T) -> Self::Output {
         for dst in self.dx.iter_mut() {
-            *dst = *dst / rhs;
+            *dst = todo!();
         }
-        self.x = self.x / rhs;
+        self.x = self.x % rhs;
         self
     }
 }
@@ -378,6 +381,6 @@ where
     type Output = Dual<T, N>;
     #[inline]
     fn rem(self, rhs: T) -> Self::Output {
-        self.clone() / rhs
+        self.clone() % rhs
     }
 }
