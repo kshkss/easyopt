@@ -50,7 +50,7 @@ where
     pub current: T::Variable,
     pub error: T::Variable,
     #[serde(skip)]
-    prev: Option<T::Variable>,
+    pub prev: Option<T::Variable>,
 }
 
 impl<T> Report for DefaultReport<T>
@@ -72,7 +72,7 @@ where
 
     fn update(&mut self, _op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
         let prev = std::mem::replace(&mut self.current, x.clone());
-        self.error = (&self.current - &prev).abs() / &prev;
+        self.error = (&self.current - &prev).abs();
         self.prev = Some(prev);
         self.count += 1;
         Ok(())
@@ -168,7 +168,7 @@ mod test {
         let x = Executor::new(solver, op)
             .report(DefaultReport::<TestCase01>::default())
             .add_monitor(monitor::to_file("test.log")?)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8 * report.current))
             .run(2.)?;
         assert!(relative_eq!(f64::sqrt(2.), x));
 
@@ -181,7 +181,7 @@ mod test {
         let solver = solver::Wegstein::new();
         let x = Executor::new(solver, op)
             .add_monitor(monitor::to_file("case02_wegstein.log")?)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8 * report.current))
             .run(2.)?;
         assert!(relative_eq!(f64::sqrt(2.), x));
 
@@ -193,7 +193,7 @@ mod test {
         let op = |x: &f64| -> f64 { x * x + x - 2. };
         let solver = solver::Steffensen::new();
         let x = Executor::new(solver, op)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8 * report.current))
             .add_monitor(monitor::to_file("case02_steffensen.log")?)
             .run(2.)?;
         assert!(relative_eq!(f64::sqrt(2.), x));
