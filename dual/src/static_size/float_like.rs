@@ -1,6 +1,6 @@
 use super::Dual;
-use crate::traits::ElementaryFunction;
-use num_traits::{Float, FromPrimitive, NumAssign};
+use crate::traits::FloatLike;
+use num_traits::{Float, FloatConst, FromPrimitive, Zero};
 
 macro_rules! unary {
     ($self:ident, $name:ident, $fx:expr, $dfdx:expr) => {
@@ -10,7 +10,7 @@ macro_rules! unary {
         };
         let derivative = $dfdx;
         for dx in $name.dx.iter_mut() {
-            *dx *= derivative;
+            *dx = *dx * derivative;
         }
         return $name
     };
@@ -31,16 +31,101 @@ macro_rules! binary {
     };
 }
 
-impl<T, const N: usize> ElementaryFunction for Dual<T, N>
+macro_rules! ternary {
+    ($x:ident, $y:ident, $z:ident, $name:ident, $f:expr, $dfdx:expr, $dfdy: expr, $dfdz: expr) => {
+        let mut $name = Self {
+            x: $f,
+            ..$x.clone()
+        };
+        let a = $dfdx;
+        let b = $dfdy;
+        let c = $dfdz;
+        for ((dx, dx2), dx3) in $name.dx.iter_mut().zip($y.dx.iter()).zip($z.dx.iter()) {
+            *dx = dx.mul_add(a, dx2.mul_add(b, c * *dx3));
+        }
+        return $name
+    };
+}
+
+impl<T, const N: usize> FloatLike<T> for Dual<T, N>
 where
-    T: Float + NumAssign + FromPrimitive,
+    T: Float + FloatConst + FromPrimitive,
 {
+    fn to_float(&self) -> T {
+        *self.val()
+    }
+
     fn negate(&self) -> Self {
         unary!(self, new, -self.x, T::from_i32(-1).unwrap());
     }
 
     fn recip(&self) -> Self {
         unary!(self, new, self.x.recip(), -self.x.powi(-2));
+    }
+
+    fn floor(&self) -> Self {
+        Self::from(self.val().floor())
+    }
+
+    fn ceil(&self) -> Self {
+        Self::from(self.val().ceil())
+    }
+
+    fn round(&self) -> Self {
+        Self::from(self.val().round())
+    }
+
+    fn trunc(&self) -> Self {
+        Self::from(self.val().trunc())
+    }
+
+    fn fract(&self) -> Self {
+        unary!(self, new, self.x.fract(), T::one());
+    }
+
+    fn abs(&self) -> Self {
+        unary!(self, new, self.x.abs(), self.x.signum());
+    }
+
+    fn signum(&self) -> Self {
+        Self::from(self.val().signum())
+    }
+
+    fn max(&self, other: &Self) -> Self {
+        if self < other {
+            other.clone()
+        } else {
+            self.clone()
+        }
+    }
+
+    fn min(&self, other: &Self) -> Self {
+        if self < other {
+            self.clone()
+        } else {
+            other.clone()
+        }
+    }
+
+    fn abs_sub(&self, other: &Self) -> Self {
+        if self < other {
+            Self::zero()
+        } else {
+            binary!(self, other, new, self.x - other.x, T::one(), -T::one());
+        }
+    }
+
+    fn mul_add(&self, a: &Self, b: &Self) -> Self {
+        ternary!(
+            self,
+            a,
+            b,
+            new,
+            self.x.mul_add(a.x, b.x),
+            a.x,
+            self.x,
+            T::one()
+        );
     }
 
     fn sqrt(&self) -> Self {
@@ -75,6 +160,17 @@ where
             self.x.powf(n.x),
             new.x * n.x / self.x,
             new.x * self.x.ln()
+        );
+    }
+
+    fn hypot(&self, other: &Self) -> Self {
+        binary!(
+            self,
+            other,
+            new,
+            T::hypot(self.x, other.x),
+            self.x / new.x,
+            other.x / new.x
         );
     }
 
@@ -134,8 +230,29 @@ where
     fn sin(&self) -> Self {
         unary!(self, new, self.x.sin(), self.x.cos());
     }
+
+    fn sin_cos(&self) -> (Self, Self) {
+        (self.sin(), self.cos())
+    }
+
     fn tan(&self) -> Self {
         unary!(self, new, self.x.tan(), T::one() + new.x.powi(2));
+    }
+
+    fn atan2(&self, y: &Self) -> Self {
+        if self.x == T::zero() && y.x == T::zero() {
+            let mut v = Self::nan();
+            v.x = T::zero();
+            v
+        } else if self.x >= T::zero() {
+            (y / self).atan()
+        } else if y.x >= T::zero() {
+            (y / self).atan() + T::PI()
+        } else if y.x < T::zero() {
+            (y / self).atan() - T::PI()
+        } else {
+            unreachable!()
+        }
     }
 
     fn acos(&self) -> Self {
@@ -216,6 +333,26 @@ mod tests {
     }
 
     #[test]
+    fn mul_add() -> anyhow::Result<()> {
+        let x = Dual::<f64, 3>::new(0, 0.5);
+        let y = Dual::<f64, 3>::new(1, 1.5);
+        let z = Dual::<f64, 3>::new(2, -1.5);
+        assert_id!(x.mul_add(&y, &z), x * y + z);
+
+        Ok(())
+    }
+
+    #[test]
+    fn abs_sub() -> anyhow::Result<()> {
+        let x = Dual::<f64, 3>::new(0, 0.5);
+        let y = Dual::<f64, 3>::new(1, 1.5);
+        assert_id!(x.abs_sub(&y), (&x - &y).max(&Dual::<f64, 3>::zero()));
+        assert_id!(y.abs_sub(&x), (&y - &x).max(&Dual::<f64, 3>::zero()));
+
+        Ok(())
+    }
+
+     #[test]
     fn sqrt() -> anyhow::Result<()> {
         let x = Dual::<f64, 1>::new(0, 3.0).sqrt();
         assert_relative_eq!(f64::sqrt(3.0), *x.val());
@@ -276,6 +413,15 @@ mod tests {
             x.powf(&Dual::<f64, 2>::constant(5. / 6.)),
             epsilon = f64::EPSILON * 10.
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn hypot() -> anyhow::Result<()> {
+        let x = Dual::<f64, 2>::new(0, 0.5);
+        let y = Dual::<f64, 2>::new(1, 1.5);
+        assert_id!(x.hypot(&y), (x.powi(2) + y.powi(2)).sqrt());
 
         Ok(())
     }
