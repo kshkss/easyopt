@@ -4,7 +4,7 @@ pub use crate::executor::*;
 pub use crate::monitor;
 pub use crate::traits::*;
 
-use num_traits::Zero;
+use num_traits::{Zero, Float, NumRef};
 use serde::Serialize;
 
 pub trait FindRootOp {
@@ -50,8 +50,7 @@ where
 impl<T> Report for DefaultReport<T>
 where
     T: FindRootOp,
-    T::Variable: Clone + Float + for<'a> BinaryOperand<&'a T::Variable, T::Variable>,
-    for<'a, 'b> &'b T::Variable: Clone + BinaryOperand<&'a T::Variable, T::Variable>,
+    T::Variable: Clone + Float,
 {
     type Arg = T::Variable;
     type Op = T;
@@ -94,8 +93,7 @@ impl<S, O> Executor<S, O>
 where
     S: Solver<O, Variable = O::Variable, ReportArg = O::Variable>,
     O: FindRootOp,
-    O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
-    for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
+    O::Variable: Clone + Float,
 {
     pub fn new(solver: S, op: O) -> Self {
         Self { solver, op }

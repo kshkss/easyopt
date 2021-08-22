@@ -4,7 +4,7 @@ pub use crate::executor::*;
 pub use crate::monitor;
 pub use crate::traits::*;
 
-use num_traits::Zero;
+use num_traits::{Zero, Float, RefNum};
 use serde::Serialize;
 
 pub trait SelfConsistentOp {
@@ -56,8 +56,8 @@ where
 impl<T> Report for DefaultReport<T>
 where
     T: SelfConsistentOp,
-    T::Variable: Clone + Float + for<'a> BinaryOperand<&'a T::Variable, T::Variable>,
-    for<'a, 'b> &'b T::Variable: Clone + BinaryOperand<&'a T::Variable, T::Variable>,
+    T::Variable: Clone + Float,
+    for<'a> &'a T::Variable: RefNum<T::Variable>,
 {
     type Arg = T::Variable;
     type Op = T;
@@ -103,8 +103,8 @@ impl<S, O> Executor<S, O>
 where
     S: Solver<O, Variable = O::Variable, ReportArg = O::Variable>,
     O: SelfConsistentOp,
-    O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
-    for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
+    O::Variable: Clone + Float,
+    for<'a> &'a O::Variable: RefNum<O::Variable>,
 {
     pub fn new(solver: S, op: O) -> Self {
         Self { solver, op }

@@ -1,19 +1,15 @@
 use super::FindRootOp;
 use crate::error::*;
 use crate::traits::*;
-use crate::traits::*;
-use num_traits::{Float, FromPrimitive, One};
-use std::marker::PhantomData;
+use num_traits::{Float, FromPrimitive, NumRef, RefNum, NumOps};
 
 pub struct NewtonRaphson;
 
 impl<T> Solver<T> for NewtonRaphson
 where
     T: FindRootOp,
-    for<'b> T::Variable:
-        Clone + BinaryOperand<T::Scalar, T::Variable> + BinaryOperand<&'b T::Variable, T::Variable>,
-    for<'b, 'c> &'c T::Variable:
-        BinaryOperand<T::Scalar, T::Variable> + BinaryOperand<&'b T::Variable, T::Variable>,
+    T::Variable: Clone + NumRef,
+    for<'a> &'a T::Variable: RefNum<T::Variable>,
     T::Scalar: Float + FromPrimitive,
 {
     type Variable = T::Variable;
@@ -50,10 +46,8 @@ pub struct Sand;
 impl<T> Solver<T> for Sand
 where
     T: FindRootOp,
-    for<'b> T::Variable:
-        Clone + BinaryOperand<T::Scalar, T::Variable> + BinaryOperand<&'b T::Variable, T::Variable>,
-    for<'b, 'c> &'c T::Variable:
-        BinaryOperand<T::Scalar, T::Variable> + BinaryOperand<&'b T::Variable, T::Variable>,
+    T::Variable: Clone + NumRef + NumOps<T::Scalar, T::Variable>,
+    for<'a> &'a T::Variable: RefNum<T::Variable> + NumOps<T::Scalar, T::Variable>,
     T::Scalar: Float + FromPrimitive,
 {
     type Variable = T::Variable;
