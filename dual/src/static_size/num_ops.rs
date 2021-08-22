@@ -1,52 +1,8 @@
+use num_traits::{Num, NumAssignOps, NumOps};
 use num_traits::{One, Zero};
-use std::cmp::Ordering;
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use super::Dual;
-
-impl<T, const N: usize> PartialEq<Self> for Dual<T, N>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.x.eq(&other.x)
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.x.ne(&other.x)
-    }
-}
-
-impl<T, const N: usize> PartialEq<T> for Dual<T, N>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &T) -> bool {
-        self.x.eq(&other)
-    }
-
-    fn ne(&self, other: &T) -> bool {
-        self.x.ne(&other)
-    }
-}
-
-impl<T, const N: usize> PartialOrd<Self> for Dual<T, N>
-where
-    T: PartialOrd,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.x.partial_cmp(&other.x)
-    }
-}
-
-impl<T, const N: usize> PartialOrd<T> for Dual<T, N>
-where
-    T: PartialOrd,
-{
-    fn partial_cmp(&self, other: &T) -> Option<Ordering> {
-        self.x.partial_cmp(&other)
-    }
-}
 
 impl<T, const N: usize> Add<&Self> for Dual<T, N>
 where
@@ -289,7 +245,7 @@ where
     type Output = Dual<T, N>;
     fn div(mut self, rhs: &Self) -> Self::Output {
         for (dst, src) in self.dx.iter_mut().zip(rhs.dx) {
-            *dst = *dst * rhs.x - src * self.x / (rhs.x * rhs.x);
+            *dst = *dst / rhs.x - src * self.x / (rhs.x * rhs.x);
         }
         self.x = self.x / rhs.x;
         self
@@ -351,5 +307,80 @@ where
     #[inline]
     fn div(self, rhs: T) -> Self::Output {
         self.clone() / rhs
+    }
+}
+
+impl<T, const N: usize> Rem<&Self> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+
+    //The remainder has the same sign as the dividend and is computed as:
+    // `x - (x / y).trunc() * y`.
+    fn rem(mut self, rhs: &Self) -> Self::Output {
+        for (dst, src) in self.dx.iter_mut().zip(rhs.dx) {
+            *dst = todo!();
+        }
+        self.x = self.x % rhs.x;
+        self
+    }
+}
+
+impl<T, const N: usize> Rem<Self> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: Self) -> Self::Output {
+        self % &rhs
+    }
+}
+
+impl<'a, 'b, T, const N: usize> Rem<&'a Dual<T, N>> for &'b Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: &'a Dual<T, N>) -> Self::Output {
+        self.clone() % rhs
+    }
+}
+
+impl<T, const N: usize> Rem<Dual<T, N>> for &Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: Dual<T, N>) -> Self::Output {
+        self.clone() % &rhs
+    }
+}
+
+impl<T, const N: usize> Rem<T> for Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    fn rem(mut self, rhs: T) -> Self::Output {
+        for dst in self.dx.iter_mut() {
+            *dst = todo!();
+        }
+        self.x = self.x % rhs;
+        self
+    }
+}
+
+impl<T, const N: usize> Rem<T> for &Dual<T, N>
+where
+    T: Num + Copy,
+{
+    type Output = Dual<T, N>;
+    #[inline]
+    fn rem(self, rhs: T) -> Self::Output {
+        self.clone() % rhs
     }
 }

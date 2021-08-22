@@ -4,6 +4,7 @@ pub mod executor;
 pub mod monitor;
 pub mod traits;
 
+pub mod find_root;
 pub mod self_consistent;
 
 #[cfg(test)]

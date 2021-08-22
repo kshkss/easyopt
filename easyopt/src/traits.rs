@@ -81,32 +81,29 @@ where
 impl Extension<f32> for f32 {}
 impl Extension<f64> for f64 {}
 
-pub trait Op {
+pub trait Solver<T> {
     type Variable;
-}
-
-pub trait Solver<T>
-where
-    T: Op,
-{
     type ReportArg;
-    fn next_iter(&mut self, op: &T, x: &T::Variable) -> Result<T::Variable, Error>;
-    fn init_report<R: Report<Arg = Self::ReportArg>>(
+    fn next_iter(&mut self, op: &T, x: &Self::Variable) -> Result<Self::Variable, Error>;
+    fn init_report<R: Report<Arg = Self::ReportArg, Op = T>>(
         &self,
         report: &mut R,
-        x: &T::Variable,
+        op: &T,
+        x: &Self::Variable,
     ) -> Result<(), Error>;
-    fn update_report<R: Report<Arg = Self::ReportArg>>(
+    fn update_report<R: Report<Arg = Self::ReportArg, Op = T>>(
         &self,
         report: &mut R,
-        x: &T::Variable,
+        op: &T,
+        x: &Self::Variable,
     ) -> Result<(), Error>;
 }
 
 pub trait Report {
     type Arg;
-    fn init(&mut self, s: &Self::Arg) -> Result<(), Error>;
-    fn update(&mut self, s: &Self::Arg) -> Result<(), Error>;
+    type Op;
+    fn init(&mut self, op: &Self::Op, s: &Self::Arg) -> Result<(), Error>;
+    fn update(&mut self, op: &Self::Op, s: &Self::Arg) -> Result<(), Error>;
 }
 
 pub trait Monitor<T>: FnMut(&T) -> anyhow::Result<()> {}

@@ -7,81 +7,73 @@ pub use crate::traits::*;
 use num_traits::Zero;
 use serde::Serialize;
 
-pub trait SelfConsistentOp {
+pub trait FindRootOp {
     type Scalar;
     type Variable;
+    type Jacobian;
     fn apply(&self, x: &Self::Variable) -> Result<Self::Variable, Error>;
+    fn jacobian(&self, x: &Self::Variable) -> Result<Self::Jacobian, Error>;
+    fn solve_jacobian(
+        &self,
+        a: &Self::Jacobian,
+        x: &Self::Variable,
+    ) -> Result<Self::Variable, Error>;
 }
 
-/* Bad
-impl<T> SelfConsistentOp for dyn Fn(&T) -> T {
-    type Variable = T;
-    fn apply(&self, x: &T) -> Result<T, Error> {
-        Ok(self(x))
-    }
-}
-*/
-/* Bad
-impl<F, T> SelfConsistentOp for F
-where F: Fn(&T) -> T {
-    type Variable = T;
-    fn apply(&self, x: &T) -> Result<T, Error> {
-        Ok(self(x))
-    }
-}
-*/
-impl<F> SelfConsistentOp for F
+/*
+impl<F> FindRootOp for F
 where
     F: Fn(&f64) -> f64,
 {
     type Scalar = f64;
     type Variable = f64;
+    type Jacobian
     fn apply(&self, x: &f64) -> Result<f64, Error> {
         Ok(self(x))
     }
+    fn solve_jacobian(&self, x: &Self::Variable) -> Result<Self::Variable, Error>{
+        todo!()
+    }
 }
+*/
 
 #[derive(Serialize)]
 pub struct DefaultReport<T>
 where
-    T: SelfConsistentOp,
+    T: FindRootOp,
 {
     pub count: usize,
     pub current: T::Variable,
     pub error: T::Variable,
-    #[serde(skip)]
-    prev: Option<T::Variable>,
 }
 
 impl<T> Report for DefaultReport<T>
 where
-    T: SelfConsistentOp,
+    T: FindRootOp,
     T::Variable: Clone + Float + for<'a> BinaryOperand<&'a T::Variable, T::Variable>,
     for<'a, 'b> &'b T::Variable: Clone + BinaryOperand<&'a T::Variable, T::Variable>,
 {
     type Arg = T::Variable;
     type Op = T;
 
-    fn init(&mut self, _op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
+    fn init(&mut self, op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
         self.count = 0;
         self.current = x.clone();
-        self.error = Float::nan();
-        self.prev = None;
+        self.error = op.apply(x)?.abs();
         Ok(())
     }
 
-    fn update(&mut self, _op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
-        let prev = std::mem::replace(&mut self.current, x.clone());
-        self.error = (&self.current - &prev).abs() / &prev;
-        self.prev = Some(prev);
+    fn update(&mut self, op: &Self::Op, x: &Self::Arg) -> Result<(), Error> {
         self.count += 1;
+        self.current = x.clone();
+        self.error = op.apply(x)?.abs();
         Ok(())
     }
 }
 
 impl<T> Default for DefaultReport<T>
 where
-    T: SelfConsistentOp,
+    T: FindRootOp,
     T::Variable: Clone + Float,
 {
     fn default() -> Self {
@@ -89,7 +81,6 @@ where
             count: 0,
             current: Zero::zero(),
             error: Float::nan(),
-            prev: None,
         }
     }
 }
@@ -102,7 +93,7 @@ pub struct Executor<S, O> {
 impl<S, O> Executor<S, O>
 where
     S: Solver<O, Variable = O::Variable, ReportArg = O::Variable>,
-    O: SelfConsistentOp,
+    O: FindRootOp,
     O::Variable: Clone + Float + for<'a> BinaryOperand<&'a O::Variable, O::Variable>,
     for<'a, 'b> &'a O::Variable: BinaryOperand<&'b O::Variable, O::Variable>,
 {
@@ -140,35 +131,36 @@ where
 pub mod solver;
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use approx::relative_eq;
 
     #[test]
-    fn case01_wegstein() -> anyhow::Result<()> {
-        struct TestCase01 {
-            a: f64,
-            b: f64,
-            c: f64,
-        }
-        impl SelfConsistentOp for TestCase01 {
+    fn case01_newton() -> anyhow::Result<()> {
+        struct Foo;
+        impl FindRootOp for Foo {
             type Scalar = f64;
             type Variable = f64;
+            type Jacobian = f64;
+
             fn apply(&self, x: &f64) -> Result<f64, Error> {
-                Ok(self.a * x * x + self.b * x + self.c)
+                Ok(x * x - 2.)
+            }
+
+            fn jacobian(&self, x: &f64) -> Result<f64, Error> {
+                Ok(2. * x)
+            }
+
+            fn solve_jacobian(&self, a: &f64, x: &f64) -> Result<f64, Error> {
+                Ok(x / a)
             }
         }
 
-        let op = TestCase01 {
-            a: 1.,
-            b: 1.,
-            c: -2.,
-        };
-        let solver = solver::Wegstein::new();
+        let op = Foo;
+        let solver = solver::NewtonRaphson;
         let x = Executor::new(solver, op)
-            .report(DefaultReport::<TestCase01>::default())
-            .add_monitor(monitor::to_file("test.log")?)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .add_monitor(monitor::to_file("case01_newton.log")?)
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-12))
             .run(2.)?;
         assert!(relative_eq!(f64::sqrt(2.), x));
 
@@ -176,27 +168,35 @@ mod test {
     }
 
     #[test]
-    fn case02_wegstein() -> anyhow::Result<()> {
-        let op = |x: &f64| -> f64 { x * x + x - 2. };
-        let solver = solver::Wegstein::new();
+    fn case01_sand() -> anyhow::Result<()> {
+        struct Foo;
+        impl FindRootOp for Foo {
+            type Scalar = f64;
+            type Variable = f64;
+            type Jacobian = f64;
+
+            fn apply(&self, x: &f64) -> Result<f64, Error> {
+                Ok(x * x - 2.)
+            }
+
+            fn jacobian(&self, x: &f64) -> Result<f64, Error> {
+                Ok(2. * x)
+            }
+
+            fn solve_jacobian(&self, a: &f64, x: &f64) -> Result<f64, Error> {
+                Ok(x / a)
+            }
+        }
+
+        let op = Foo;
+        let solver = solver::Sand;
         let x = Executor::new(solver, op)
-            .add_monitor(monitor::to_file("case02_wegstein.log")?)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
+            .add_monitor(monitor::to_file("case01_sand.log")?)
+            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-12))
             .run(2.)?;
+        println!("{} {}", f64::sqrt(2.), x);
         assert!(relative_eq!(f64::sqrt(2.), x));
 
-        Ok(())
-    }
-
-    #[test]
-    fn case02_steffensen() -> anyhow::Result<()> {
-        let op = |x: &f64| -> f64 { x * x + x - 2. };
-        let solver = solver::Steffensen::new();
-        let x = Executor::new(solver, op)
-            .terminate(when(|report: &DefaultReport<_>| report.error < 1e-8))
-            .add_monitor(monitor::to_file("case02_steffensen.log")?)
-            .run(2.)?;
-        assert!(relative_eq!(f64::sqrt(2.), x));
         Ok(())
     }
 }
