@@ -2,7 +2,7 @@
 
 members = [
 	"dual",
-	"easyopt",
 	"table-dump",
 	"integrate",
+	"find_root",
 ]
