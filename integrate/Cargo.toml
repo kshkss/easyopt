@@ -1,0 +1,28 @@
+[package]
+name = "integrate"
+version = "0.1.0"
+license = "MIT"
+edition = "2018"
+repository = "https://github.com/kshkss/easyopt.git"
+description = "Solve systems of ordianl differential equations and differential algebraic equations."
+homepage = "https://github.com/kshkss/easyopt.git"
+build = "build.rs"
+categories = ["science", "mathematics"]
+keywords = ["ODE", "DAE"]
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+system-libffi = ["libffi/system"]
+latest-gcc = []
+
+[dependencies]
+lazy_static = "1.4.0"
+libc = "0.2"
+libffi = "1"
+ndarray = "0.14"
+
+[build-dependencies]
+cc = "1.0"
