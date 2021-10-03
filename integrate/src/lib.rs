@@ -59,30 +59,33 @@ lazy_static! {
 use ndarray::prelude::*;
 
 #[derive(Clone, Copy)]
-enum MethodFlag {
-    EstimateFullJacobian,
-    FullJacobian,
-    EstimateBandedJacobian(usize, usize),
-    BandedJacobian(usize, usize),
+enum Generator {
+    InternalFull,
+    UserSuppliedFull,
+    InternalBanded(usize, usize),
+    UserSuppliedBanded(usize, usize),
 }
 
+type JacobianGenerator<'a> = Box<
+    dyn 'a
+        + Fn(
+            *const c_int,
+            *const c_double,
+            *const c_double,
+            *const c_int,
+            *const c_int,
+            *mut c_double,
+            *const c_int,
+        ),
+>;
+
 pub struct Jacobian<'a> {
-    mf: MethodFlag,
-    udf: Box<
-        dyn 'a
-            + Fn(
-                *const c_int,
-                *const c_double,
-                *const c_double,
-                *const c_int,
-                *const c_int,
-                *mut c_double,
-                *const c_int,
-            ),
-    >,
+    mf: Generator,
+    udf: JacobianGenerator<'a>,
 }
 
 impl<'a> Jacobian<'a> {
+    /*
     fn new<G>(mf: MethodFlag, g: G) -> Self
     where
         G: 'a
@@ -99,35 +102,36 @@ impl<'a> Jacobian<'a> {
         let udf = Box::new(g);
         Self { mf, udf }
     }
+    */
 
     fn method_flag(&self) -> c_int {
-        use MethodFlag::*;
+        use Generator::*;
         match self.mf {
-            EstimateFullJacobian => 22 as c_int,
-            EstimateBandedJacobian(_, _) => 25 as c_int,
-            FullJacobian => 21,
-            BandedJacobian(_, _) => 24 as c_int,
+            InternalFull => 22,
+            InternalBanded(_, _) => 25,
+            UserSuppliedFull => 21,
+            UserSuppliedBanded(_, _) => 24,
         }
     }
 
     fn real_work_space(&self, n_eq: usize) -> Vec<c_double> {
-        use MethodFlag::*;
+        use Generator::*;
         match self.mf {
-            EstimateFullJacobian | FullJacobian => {
-                vec![0. as c_double; 22 + 9 * n_eq + n_eq * n_eq]
+            InternalFull | UserSuppliedFull => {
+                vec![0_f64; 22 + 9 * n_eq + n_eq * n_eq]
             }
-            EstimateBandedJacobian(ml, mu) | BandedJacobian(ml, mu) => {
-                vec![0. as c_double; 22 + 10 * n_eq + (2 * ml + mu) * n_eq]
+            InternalBanded(ml, mu) | UserSuppliedBanded(ml, mu) => {
+                vec![0_f64; 22 + 10 * n_eq + (2 * ml + mu) * n_eq]
             }
         }
     }
 
     fn integer_work_space(&self, n_eq: usize) -> Vec<c_int> {
-        use MethodFlag::*;
+        use Generator::*;
         match self.mf {
-            EstimateFullJacobian | FullJacobian => vec![0 as c_int; 22 + n_eq],
-            EstimateBandedJacobian(ml, mu) | BandedJacobian(ml, mu) => {
-                let mut iwork = vec![0 as c_int; 22 + n_eq];
+            InternalFull | UserSuppliedFull => vec![0_i32; 22 + n_eq],
+            InternalBanded(ml, mu) | UserSuppliedBanded(ml, mu) => {
+                let mut iwork = vec![0_i32; 22 + n_eq];
                 iwork[0] = ml as c_int;
                 iwork[1] = mu as c_int;
                 iwork
@@ -136,12 +140,12 @@ impl<'a> Jacobian<'a> {
     }
 }
 
-pub struct Lsode<'a> {
+pub struct BDF<'a> {
     dydt: Box<dyn 'a + Fn(&[f64], f64) -> Vec<f64>>,
     jacobian: Jacobian<'a>,
 }
 
-impl<'a> Lsode<'a> {
+impl<'a> BDF<'a> {
     /// Solves system of ODEs for times in `t`.
     /// First time in `t` has to be the initial time.
     ///
@@ -162,7 +166,7 @@ impl<'a> Lsode<'a> {
     ///     dy[0] = t * y[0];
     ///     dy
     ///     };
-    /// let sol = integrate::Lsode::new(f).solve(&y0, &ts, 1e-6, 1e-6);
+    /// let sol = integrate::BDF::new(f).solve(&y0, &ts, 1e-6, 1e-6);
     ///
     /// assert!((sol[1][0] - y0[0]*0.5_f64.exp()).abs() < 1e-3, "error too large");
     /// ```
@@ -249,27 +253,15 @@ impl<'a> Lsode<'a> {
         Self {
             dydt: Box::new(dydt),
             jacobian: Jacobian {
-                mf: MethodFlag::EstimateFullJacobian,
+                mf: Generator::InternalFull,
                 udf: Box::new(g),
             },
         }
     }
 
-    /// # Example
+    /// Default
     ///
-    /// ```
-    /// extern crate approx;
-    ///
-    /// let y0 = [1., 1.];
-    /// let ts = vec![0., 1.];
-    /// let f = |y: &[f64], t: f64| vec![t * y[0], (t + 2.) * y[1]];
-    /// let sol = integrate::Lsode::new(f)
-    ///     .estimate_banded_jacobian(0, 0)
-    ///     .solve(&y0, &ts, 1e-6, 1e-6);
-    ///
-    /// approx::assert_abs_diff_eq!(sol[1][0], y0[0]*0.5_f64.exp(), epsilon = 1e-3);
-    /// ```
-    pub fn estimate_banded_jacobian(self, ml: usize, mu: usize) -> Self {
+    pub fn gen_full_jacobian(self) -> Self {
         let g = |_neq: *const c_int,
                  _t: *const c_double,
                  _y: *const c_double,
@@ -277,9 +269,9 @@ impl<'a> Lsode<'a> {
                  _mu: *const c_int,
                  _pd: *mut c_double,
                  _nr: *const c_int| {};
-        Lsode {
+        Self {
             jacobian: Jacobian {
-                mf: MethodFlag::EstimateBandedJacobian(ml, mu),
+                mf: Generator::InternalFull,
                 udf: Box::new(g),
             },
             ..self
@@ -302,8 +294,8 @@ impl<'a> Lsode<'a> {
     ///     [998., 1998.],
     ///     [-999., -1999.],
     ///     ];
-    /// let sol = integrate::Lsode::new(f)
-    ///     .with_full_jacobian(g)
+    /// let sol = integrate::BDF::new(f)
+    ///     .gen_full_jacobian_by(g)
     ///     .solve(&y0, &ts, 1e-6, 1e-8);
     ///
     /// for (y, t) in sol.iter().zip(ts) {
@@ -311,7 +303,7 @@ impl<'a> Lsode<'a> {
     ///     approx::assert_abs_diff_eq!(y[1], -(-t).exp() + (-1000. * t).exp(), epsilon = 1e-3);
     /// }
     /// ```
-    pub fn with_full_jacobian<G>(self, udf: G) -> Self
+    pub fn gen_full_jacobian_by<G>(self, udf: G) -> Self
     where
         G: 'a + Fn(&[f64], f64) -> Array2<f64>,
     {
@@ -335,9 +327,40 @@ impl<'a> Lsode<'a> {
             let dy_new = udf(y, t);
             dy.assign(&dy_new);
         };
-        Lsode {
+        Self {
             jacobian: Jacobian {
-                mf: MethodFlag::FullJacobian,
+                mf: Generator::UserSuppliedFull,
+                udf: Box::new(g),
+            },
+            ..self
+        }
+    }
+
+    /// # Example
+    ///
+    /// ```
+    /// extern crate approx;
+    ///
+    /// let y0 = [1., 1.];
+    /// let ts = vec![0., 1.];
+    /// let f = |y: &[f64], t: f64| vec![t * y[0], (t + 2.) * y[1]];
+    /// let sol = integrate::BDF::new(f)
+    ///     .gen_banded_jacobian(0, 0)
+    ///     .solve(&y0, &ts, 1e-6, 1e-6);
+    ///
+    /// approx::assert_abs_diff_eq!(sol[1][0], y0[0]*0.5_f64.exp(), epsilon = 1e-3);
+    /// ```
+    pub fn gen_banded_jacobian(self, ml: usize, mu: usize) -> Self {
+        let g = |_neq: *const c_int,
+                 _t: *const c_double,
+                 _y: *const c_double,
+                 _ml: *const c_int,
+                 _mu: *const c_int,
+                 _pd: *mut c_double,
+                 _nr: *const c_int| {};
+        Self {
+            jacobian: Jacobian {
+                mf: Generator::InternalBanded(ml, mu),
                 udf: Box::new(g),
             },
             ..self
@@ -353,7 +376,7 @@ impl<'a> Lsode<'a> {
     ///         a00  a11  a22  a33  a44  a55
     ///         a10  a21  a32  a43  a54   *
     ///         a20  a31  a42  a53   *    *
-    pub fn with_banded_jacobian<G>(self, ml: usize, mu: usize, udf: G) -> Self
+    pub fn gen_banded_jacobian_by<G>(self, ml: usize, mu: usize, udf: G) -> Self
     where
         G: 'a + Fn(&[f64], f64) -> Vec<Array1<f64>>,
     {
@@ -380,9 +403,9 @@ impl<'a> Lsode<'a> {
                 dy.assign(dy_new);
             }
         };
-        Lsode {
+        Self {
             jacobian: Jacobian {
-                mf: MethodFlag::BandedJacobian(ml, mu),
+                mf: Generator::UserSuppliedBanded(ml, mu),
                 udf: Box::new(g),
             },
             ..self
