@@ -344,6 +344,15 @@ impl<'a> Lsode<'a> {
         }
     }
 
+    ///
+    ///
+    ///     The matrix a is stored in `ab` using the matrix diagonal ordered form::
+    ///         ab[mu + i - j][j] == a[i,j]
+    ///     Example of `ab` (shape of a is (6,6), `u` =1, `l` =2)::
+    ///         *    a01  a12  a23  a34  a45
+    ///         a00  a11  a22  a33  a44  a55
+    ///         a10  a21  a32  a43  a54   *
+    ///         a20  a31  a42  a53   *    *
     pub fn with_banded_jacobian<G>(self, ml: usize, mu: usize, udf: G) -> Self
     where
         G: 'a + Fn(&[f64], f64) -> Vec<Array1<f64>>,
@@ -356,7 +365,7 @@ impl<'a> Lsode<'a> {
                       dy_ptr: *mut c_double,
                       _nrow: *const c_int| {
             let n = unsafe { *n as usize };
-            let ms: usize = todo!();
+            let ms: usize = (ml + mu + 1) * n;
             let (dy, y, t) = unsafe {
                 (
                     slice::from_raw_parts_mut(dy_ptr, ms),
@@ -364,14 +373,13 @@ impl<'a> Lsode<'a> {
                     *t_ptr,
                 )
             };
-            let mut dy = ArrayViewMut1::<f64>::from(dy);
+            let mut dy = ArrayViewMut2::<f64>::from_shape((ml + mu + 1, n), dy).unwrap();
+            dy.swap_axes(0, 1); // make dy fortran-ordered
             let dy_new = udf(y, t);
-            /*
-            dy.assign(&dy_new);
-            */
-            todo!()
+            for (mut dy, dy_new) in dy.axis_iter_mut(Axis(0)).zip(dy_new.iter()) {
+                dy.assign(dy_new);
+            }
         };
-        todo!();
         Lsode {
             jacobian: Jacobian {
                 mf: MethodFlag::BandedJacobian(ml, mu),
