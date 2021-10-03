@@ -142,115 +142,8 @@ pub struct Lsode<'a> {
 }
 
 impl<'a> Lsode<'a> {
-    pub fn new<F>(dydt: F) -> Self
-    where
-        F: 'a + Fn(&[f64], f64) -> Vec<f64>,
-    {
-        let g = |_neq: *const c_int,
-                 _t: *const c_double,
-                 _y: *const c_double,
-                 _ml: *const c_int,
-                 _mu: *const c_int,
-                 _pd: *mut c_double,
-                 _nr: *const c_int| {};
-        Self {
-            dydt: Box::new(dydt),
-            jacobian: Jacobian {
-                mf: MethodFlag::EstimateFullJacobian,
-                udf: Box::new(g),
-            },
-        }
-    }
-
-    pub fn estimate_banded_jacobian(self, ml: usize, mu: usize) -> Self {
-        let g = |_neq: *const c_int,
-                 _t: *const c_double,
-                 _y: *const c_double,
-                 _ml: *const c_int,
-                 _mu: *const c_int,
-                 _pd: *mut c_double,
-                 _nr: *const c_int| {};
-        Lsode {
-            jacobian: Jacobian {
-                mf: MethodFlag::EstimateBandedJacobian(ml, mu),
-                udf: Box::new(g),
-            },
-            ..self
-        }
-    }
-
-    pub fn with_full_jacobian<G>(self, udf: G) -> Self
-    where
-        G: 'a + Fn(&[f64], f64) -> Array2<f64>,
-    {
-        let g = move |n: *const c_int,
-                      t_ptr: *const c_double,
-                      y_ptr: *const c_double,
-                      _ml: *const c_int,
-                      _mu: *const c_int,
-                      dy_ptr: *mut c_double,
-                      _nrow: *const c_int| {
-            let n = unsafe { *n as usize };
-            let (dy, y, t) = unsafe {
-                (
-                    slice::from_raw_parts_mut(dy_ptr, n * n),
-                    slice::from_raw_parts(y_ptr, n),
-                    *t_ptr,
-                )
-            };
-            let mut dy = ArrayViewMut2::<f64>::from_shape((n, n), dy).expect("somthing wrong");
-            dy.swap_axes(0, 1); // make dy fortran-ordered
-            let dy_new = udf(y, t);
-            dy.assign(&dy_new);
-        };
-        Lsode {
-            jacobian: Jacobian {
-                mf: MethodFlag::FullJacobian,
-                udf: Box::new(g),
-            },
-            ..self
-        }
-    }
-
-    pub fn with_banded_jacobian<G>(self, ml: usize, mu: usize, udf: G) -> Self
-    where
-        G: 'a + Fn(&[f64], f64) -> Vec<Array1<f64>>,
-    {
-        let g = move |n: *const c_int,
-                      t_ptr: *const c_double,
-                      y_ptr: *const c_double,
-                      _ml: *const c_int,
-                      _mu: *const c_int,
-                      dy_ptr: *mut c_double,
-                      _nrow: *const c_int| {
-            let n = unsafe { *n as usize };
-            let ms: usize = todo!();
-            let (dy, y, t) = unsafe {
-                (
-                    slice::from_raw_parts_mut(dy_ptr, ms),
-                    slice::from_raw_parts(y_ptr, n),
-                    *t_ptr,
-                )
-            };
-            let mut dy = ArrayViewMut1::<f64>::from(dy);
-            let dy_new = udf(y, t);
-            /*
-            dy.assign(&dy_new);
-            */
-            todo!()
-        };
-        todo!();
-        Lsode {
-            jacobian: Jacobian {
-                mf: MethodFlag::BandedJacobian(ml, mu),
-                udf: Box::new(g),
-            },
-            ..self
-        }
-    }
-
-    /// Solves system of ODEs for times in `t_dense`.
-    /// First time in `t_dense` has to be the initial time.
+    /// Solves system of ODEs for times in `t`.
+    /// First time in `t` has to be the initial time.
     ///
     /// Each equation in the system of ODEs has the form:
     ///
@@ -269,7 +162,7 @@ impl<'a> Lsode<'a> {
     ///     dy[0] = t * y[0];
     ///     dy
     ///     };
-    /// let sol = lsode::Lsode::new(f).solve(&y0, &ts, 1e-6, 1e-6);
+    /// let sol = integrate::Lsode::new(f).solve(&y0, &ts, 1e-6, 1e-6);
     ///
     /// assert!((sol[1][0] - y0[0]*0.5_f64.exp()).abs() < 1e-3, "error too large");
     /// ```
@@ -341,7 +234,152 @@ impl<'a> Lsode<'a> {
         }
         result
     }
-}
+
+    pub fn new<F>(dydt: F) -> Self
+    where
+        F: 'a + Fn(&[f64], f64) -> Vec<f64>,
+    {
+        let g = |_neq: *const c_int,
+                 _t: *const c_double,
+                 _y: *const c_double,
+                 _ml: *const c_int,
+                 _mu: *const c_int,
+                 _pd: *mut c_double,
+                 _nr: *const c_int| {};
+        Self {
+            dydt: Box::new(dydt),
+            jacobian: Jacobian {
+                mf: MethodFlag::EstimateFullJacobian,
+                udf: Box::new(g),
+            },
+        }
+    }
+
+    /// # Example
+    ///
+    /// ```
+    /// extern crate approx;
+    ///
+    /// let y0 = [1., 1.];
+    /// let ts = vec![0., 1.];
+    /// let f = |y: &[f64], t: f64| vec![t * y[0], (t + 2.) * y[1]];
+    /// let sol = integrate::Lsode::new(f)
+    ///     .estimate_banded_jacobian(0, 0)
+    ///     .solve(&y0, &ts, 1e-6, 1e-6);
+    ///
+    /// approx::assert_abs_diff_eq!(sol[1][0], y0[0]*0.5_f64.exp(), epsilon = 1e-3);
+    /// ```
+    pub fn estimate_banded_jacobian(self, ml: usize, mu: usize) -> Self {
+        let g = |_neq: *const c_int,
+                 _t: *const c_double,
+                 _y: *const c_double,
+                 _ml: *const c_int,
+                 _mu: *const c_int,
+                 _pd: *mut c_double,
+                 _nr: *const c_int| {};
+        Lsode {
+            jacobian: Jacobian {
+                mf: MethodFlag::EstimateBandedJacobian(ml, mu),
+                udf: Box::new(g),
+            },
+            ..self
+        }
+    }
+
+    /// # Example
+    ///
+    /// ```
+    /// extern crate approx;
+    /// use ndarray::prelude::*;
+    ///
+    /// let y0 = [1., 0.];
+    /// let ts = Array1::linspace(0., 1., 10).to_vec();
+    /// let f = |y: &[f64], t: f64| vec![
+    ///     998. * y[0] + 1998. * y[1],
+    ///     -999. * y[0] - 1999. * y[1],
+    ///     ];
+    /// let g = |_y: &[f64], _t: f64| array![
+    ///     [998., 1998.],
+    ///     [-999., -1999.],
+    ///     ];
+    /// let sol = integrate::Lsode::new(f)
+    ///     .with_full_jacobian(g)
+    ///     .solve(&y0, &ts, 1e-6, 1e-8);
+    ///
+    /// for (y, t) in sol.iter().zip(ts) {
+    ///     approx::assert_abs_diff_eq!(y[0], 2. * (-t).exp() - (-1000. * t).exp(), epsilon = 1e-3);
+    ///     approx::assert_abs_diff_eq!(y[1], -(-t).exp() + (-1000. * t).exp(), epsilon = 1e-3);
+    /// }
+    /// ```
+    pub fn with_full_jacobian<G>(self, udf: G) -> Self
+    where
+        G: 'a + Fn(&[f64], f64) -> Array2<f64>,
+    {
+        let g = move |n: *const c_int,
+                      t_ptr: *const c_double,
+                      y_ptr: *const c_double,
+                      _ml: *const c_int,
+                      _mu: *const c_int,
+                      dy_ptr: *mut c_double,
+                      _nrow: *const c_int| {
+            let n = unsafe { *n as usize };
+            let (dy, y, t) = unsafe {
+                (
+                    slice::from_raw_parts_mut(dy_ptr, n * n),
+                    slice::from_raw_parts(y_ptr, n),
+                    *t_ptr,
+                )
+            };
+            let mut dy = ArrayViewMut2::<f64>::from_shape((n, n), dy).expect("somthing wrong");
+            dy.swap_axes(0, 1); // make dy fortran-ordered
+            let dy_new = udf(y, t);
+            dy.assign(&dy_new);
+        };
+        Lsode {
+            jacobian: Jacobian {
+                mf: MethodFlag::FullJacobian,
+                udf: Box::new(g),
+            },
+            ..self
+        }
+    }
+
+    pub fn with_banded_jacobian<G>(self, ml: usize, mu: usize, udf: G) -> Self
+    where
+        G: 'a + Fn(&[f64], f64) -> Vec<Array1<f64>>,
+    {
+        let g = move |n: *const c_int,
+                      t_ptr: *const c_double,
+                      y_ptr: *const c_double,
+                      _ml: *const c_int,
+                      _mu: *const c_int,
+                      dy_ptr: *mut c_double,
+                      _nrow: *const c_int| {
+            let n = unsafe { *n as usize };
+            let ms: usize = todo!();
+            let (dy, y, t) = unsafe {
+                (
+                    slice::from_raw_parts_mut(dy_ptr, ms),
+                    slice::from_raw_parts(y_ptr, n),
+                    *t_ptr,
+                )
+            };
+            let mut dy = ArrayViewMut1::<f64>::from(dy);
+            let dy_new = udf(y, t);
+            /*
+            dy.assign(&dy_new);
+            */
+            todo!()
+        };
+        todo!();
+        Lsode {
+            jacobian: Jacobian {
+                mf: MethodFlag::BandedJacobian(ml, mu),
+                udf: Box::new(g),
+            },
+            ..self
+        }
+    }
 
 /// Generates vector from `start` to `stop` with constant  spacing.
 ///
