@@ -140,6 +140,111 @@ impl<'a> Jacobian<'a> {
     }
 }
 
+pub struct Adams<'a> {
+    dydt: Box<dyn 'a + Fn(&[f64], f64) -> Vec<f64>>,
+}
+
+impl<'a> Adams<'a> {
+    /// Solves system of ODEs for times in `t`.
+    /// First time in `t` has to be the initial time.
+    ///
+    /// Each equation in the system of ODEs has the form:
+    ///
+    /// > *dy/dt = f(y, t)*
+    ///
+    /// The function expects the function *f* as the first argument `rhs`.
+    /// Initial state is given in `y0`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let y0 = [1.0];
+    /// let ts = vec![0.0, 1.0];
+    /// let f = |y: &[f64], t: f64| {
+    ///     let mut dy = vec![0.0];
+    ///     dy[0] = t * y[0];
+    ///     dy
+    ///     };
+    /// let sol = integrate::Adams::new(f).solve(&y0, &ts, 1e-6, 1e-6);
+    ///
+    /// assert!((sol[1][0] - y0[0]*0.5_f64.exp()).abs() < 1e-3, "error too large");
+    /// ```
+    pub fn solve(&self, y0: &[f64], t: &[f64], atol: f64, rtol: f64) -> Vec<Vec<f64>> {
+        let f = |n: *const c_int,
+                 t_ptr: *const c_double,
+                 y_ptr: *mut c_double,
+                 dy_ptr: *mut c_double| {
+            let (dy, y, t) = unsafe {
+                (
+                    slice::from_raw_parts_mut(dy_ptr, *n as usize),
+                    slice::from_raw_parts(y_ptr, *n as usize),
+                    *t_ptr,
+                )
+            };
+            let dy_new = (self.dydt)(y, t);
+            for (dest, &deriv) in dy.iter_mut().zip(dy_new.iter()) {
+                *dest = deriv;
+            }
+        };
+        let closure = Closure4::new(&f);
+        let call = closure.code_ptr();
+
+        let mut y: Vec<f64> = y0.to_vec();
+        let n = y0.len();
+        let mut t0 = t[0];
+
+        let itol = 1;
+        let itask = 1;
+        let iopt = 0;
+        let mut istate = 1;
+        let mf = 10;
+
+        let mut rwork = vec![0_f64; 20 + 16 * n];
+        let mut iwork = vec![0_i32; 20];
+        let lrw = rwork.len();
+        let liw = iwork.len();
+
+        let mut result = Vec::with_capacity(t.len());
+
+        let _lock = FLAG.lock().unwrap();
+        for &tout in t.iter() {
+            unsafe {
+                dlsode_(
+                    *call,
+                    &(n as i32),
+                    y.as_mut_ptr(),
+                    &mut t0,
+                    &tout,
+                    &itol,
+                    &rtol,
+                    &atol,
+                    &itask,
+                    &mut istate,
+                    &iopt,
+                    rwork.as_mut_ptr(),
+                    &(lrw as i32),
+                    iwork.as_mut_ptr(),
+                    &(liw as i32),
+                    fake_jacobian,
+                    &mf,
+                );
+            }
+
+            result.push(y.clone());
+        }
+        result
+    }
+
+    pub fn new<F>(dydt: F) -> Self
+    where
+        F: 'a + Fn(&[f64], f64) -> Vec<f64>,
+    {
+        Self {
+            dydt: Box::new(dydt),
+        }
+    }
+}
+
 pub struct BDF<'a> {
     dydt: Box<dyn 'a + Fn(&[f64], f64) -> Vec<f64>>,
     jacobian: Jacobian<'a>,
