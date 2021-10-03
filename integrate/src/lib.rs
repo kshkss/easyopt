@@ -380,18 +380,6 @@ impl<'a> Lsode<'a> {
             ..self
         }
     }
-
-/// Generates vector from `start` to `stop` with constant  spacing.
-///
-/// # Example
-///
-/// ```
-/// assert_eq!(lsode::linspace(0.0, 2.0, 3), vec![0.0, 1.0, 2.0]);
-/// ```
-pub fn linspace(start: f64, stop: f64, n_points: usize) -> Vec<f64> {
-    (0..n_points)
-        .map(|i| start + i as f64 * (stop - start) / (n_points - 1) as f64)
-        .collect()
 }
 
 #[cfg(test)]
