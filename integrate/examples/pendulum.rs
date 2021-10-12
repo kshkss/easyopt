@@ -1,4 +1,4 @@
-use integrate::Lsode;
+use integrate::BDF;
 use ndarray::prelude::*;
 
 /// This example has the setup from:
@@ -20,7 +20,7 @@ fn main() {
     let ts = Array1::linspace(0.0, 10.0, 1000).to_vec();
     let (atol, rtol) = (1e-6, 1e-6);
 
-    let sol = Lsode::new(f).solve(&y0, &ts, atol, rtol);
+    let sol = BDF::new(f).solve(&y0, &ts, atol, rtol);
 
     for (i, t) in sol.iter().zip(ts) {
         println!("{} {} {}", t, i[0], i[1]);

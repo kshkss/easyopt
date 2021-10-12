@@ -19,7 +19,7 @@ fn stiff() {
     let atol = 1e-6;
     let rtol = 1e-8;
 
-    let sol = integrate::Lsode::new(rhs_stiff).solve(&y0, &ts, atol, rtol);
+    let sol = integrate::BDF::new(rhs_stiff).solve(&y0, &ts, atol, rtol);
 
     for (analytical, calculated) in ts.iter().map(|x| solution_stiff(*x)).zip(sol) {
         assert!(
@@ -47,8 +47,8 @@ fn stiff_with_jacobian() {
     let atol = 1e-6;
     let rtol = 1e-8;
 
-    let sol = integrate::Lsode::new(rhs_stiff)
-        .with_full_jacobian(g)
+    let sol = integrate::BDF::new(rhs_stiff)
+        .gen_full_jacobian_by(g)
         .solve(&y0, &ts, atol, rtol);
 
     for (analytical, calculated) in ts.iter().map(|x| solution_stiff(*x)).zip(sol) {
@@ -84,7 +84,7 @@ fn decay() {
     let atol = 1e-6;
     let rtol = 1e-8;
 
-    let sol = integrate::Lsode::new(rhs_decay).solve(&y0, &ts, atol, rtol);
+    let sol = integrate::BDF::new(rhs_decay).solve(&y0, &ts, atol, rtol);
 
     println!("{:?}", sol);
 
@@ -106,8 +106,8 @@ fn decay_with_jacobian() {
     let atol = 1e-6;
     let rtol = 1e-8;
 
-    let sol = integrate::Lsode::new(rhs_decay)
-        .with_full_jacobian(g)
+    let sol = integrate::BDF::new(rhs_decay)
+        .gen_full_jacobian_by(g)
         .solve(&y0, &ts, atol, rtol);
 
     println!("{:?}", sol);
@@ -131,7 +131,7 @@ fn closure_rhs() {
         dy[0] = t * y[0];
         dy
     };
-    let sol = integrate::Lsode::new(f).solve(&y0, &ts, 1e-6, 1e-6);
+    let sol = integrate::BDF::new(f).solve(&y0, &ts, 1e-6, 1e-6);
     println!("{:?}", sol);
     assert!(
         (sol[1][0] - y0[0] * 0.5_f64.exp()).abs() < 1e-3,
@@ -149,8 +149,8 @@ fn closure_rhs_with_jacobian() {
         dy
     };
     let g = |_y: &[f64], t: f64| array![[t]];
-    let sol = integrate::Lsode::new(f)
-        .with_full_jacobian(g)
+    let sol = integrate::BDF::new(f)
+        .gen_full_jacobian_by(g)
         .solve(&y0, &ts, 1e-6, 1e-6);
     println!("{:?}", sol);
     assert!(
@@ -164,8 +164,8 @@ fn closure_rhs_estimate_banded_jacobian() {
     let y0 = [1.0, 10.];
     let ts = vec![0.0, 1.0];
     let f = |y: &[f64], t: f64| vec![t * y[0], (t + 2.) * y[1]];
-    let sol = integrate::Lsode::new(f)
-        .estimate_banded_jacobian(0, 0)
+    let sol = integrate::BDF::new(f)
+        .gen_banded_jacobian(0, 0)
         .solve(&y0, &ts, 1e-6, 1e-6);
     println!("{:?}", sol);
     assert!(
