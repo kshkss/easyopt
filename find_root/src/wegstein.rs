@@ -1,5 +1,7 @@
 use ndarray::prelude::*;
 use ndarray::Zip;
+use num_traits::Float;
+use std::ops::Mul;
 
 /// Solves self consistent equation.
 ///
@@ -21,13 +23,16 @@ use ndarray::Zip;
 ///
 /// approx::assert_relative_eq!(2.0_f64.sqrt(), sol[0], max_relative=1e-15);
 /// ```
-pub struct Wegstein<'a> {
-    f: Box<dyn 'a + Fn(&[f64]) -> Vec<f64>>,
+pub struct Wegstein<'a, T> {
+    f: Box<dyn 'a + Fn(&[T]) -> Vec<T>>,
     max_iter: usize,
 }
 
-impl<'a> Wegstein<'a> {
-    pub fn new(f: impl 'a + Fn(&[f64]) -> Vec<f64>) -> Self {
+impl<'a, T> Wegstein<'a, T>
+where
+    T: Float + Mul<f64, Output = T>,
+{
+    pub fn new(f: impl 'a + Fn(&[T]) -> Vec<T>) -> Self {
         Self {
             f: Box::new(f),
             max_iter: 500,
@@ -41,7 +46,7 @@ impl<'a> Wegstein<'a> {
         }
     }
 
-    pub fn solve(&self, init: &[f64], atol: &[f64], rtol: &[f64]) -> Vec<f64> {
+    pub fn solve(&self, init: &[T], atol: &[T], rtol: &[f64]) -> Vec<T> {
         let atol = ArrayView1::from(atol);
         let rtol = ArrayView1::from(rtol);
         let mut x_prev = ArrayView1::from(init).to_owned();
@@ -54,7 +59,7 @@ impl<'a> Wegstein<'a> {
                 .and(&atol)
                 .and(&rtol)
                 .all(|&x1, &x2, &atol, &rtol| {
-                    (x1 - x2).abs() < atol + rtol * x1.abs().max(x2.abs())
+                    (x1 - x2).abs() < atol + x1.abs().max(x2.abs()) * rtol
                 })
             {
                 return y.to_vec();
