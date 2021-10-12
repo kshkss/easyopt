@@ -1,4 +1,5 @@
-use lsode::{linspace, Lsode};
+use integrate::Lsode;
+use ndarray::prelude::*;
 
 /// This example has the setup from:
 /// https://docs.juliadiffeq.org/stable/tutorials/ode_example/#Example-3:-Solving-Nonhomogeneous-Equations-using-Parameterized-Functions-1
@@ -16,7 +17,7 @@ fn main() {
     };
 
     let y0 = [0.01, 0.0];
-    let ts = linspace(0.0, 10.0, 1000);
+    let ts = Array1::linspace(0.0, 10.0, 1000).to_vec();
     let (atol, rtol) = (1e-6, 1e-6);
 
     let sol = Lsode::new(f).solve(&y0, &ts, atol, rtol);
