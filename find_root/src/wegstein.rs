@@ -59,11 +59,18 @@ impl<'a> Wegstein<'a> {
             {
                 return y.to_vec();
             }
-            let s = (&y - &y_prev) / &(&x - &x_prev);
-            let t = s.map(|x| 1. / (1. - x));
+            let dy = &y - &y_prev;
+            let dx = &x - &x_prev;
             x_prev = x;
             y_prev = y;
-            x = &t * &y_prev + (1. - &t) * &x_prev;
+            x = Zip::from(&x_prev)
+                .and(&y_prev)
+                .and(&dx)
+                .and(&dy)
+                .and(&atol)
+                .apply_collect(|&x, &y, &dx, &dy, &atol| {
+                    ((dy * x - dx * y) / ((dy - dx).abs() + atol)) * (dy - dx).signum()
+                });
         }
         x.to_vec()
     }

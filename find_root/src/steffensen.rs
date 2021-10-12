@@ -58,12 +58,13 @@ impl<'a> Steffensen<'a> {
             {
                 return z.to_vec();
             }
-            x = Zip::from(&x)
-                .and(&y)
-                .and(&z)
-                .apply_collect(|&x0, &x1, &x2| {
-                    x0 - (x1 - x0).powi(2) * (x2 + x0 - 2. * x1).recip()
-                });
+            let dx0 = &y - &x;
+            let dx1 = &z - &y;
+            x = Zip::from(&x).and(&dx0).and(&dx1).and(&atol).apply_collect(
+                |&x0, &dx0, &dx1, &atol| {
+                    x0 - dx0.powi(2) / ((dx1 - dx0).abs() + atol) * (dx1 - dx0).signum()
+                },
+            );
         }
         x.to_vec()
     }
