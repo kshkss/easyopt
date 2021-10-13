@@ -1,6 +1,10 @@
+use dimensioned::typenum::Quot;
 use libc::{c_double, c_int};
 use libffi::high::Closure4;
 use libffi::high::Closure7;
+use num_traits::Float;
+use static_assertions::const_assert_eq;
+use std::ops::{Div, Mul};
 use std::slice;
 
 #[link(name = "gfortran")]
@@ -12,8 +16,8 @@ extern "C" {
         f: extern "C" fn(*const c_int, *const c_double, *mut c_double, *mut c_double),
         neq: &c_int,
         y: *mut c_double,
-        t: &mut c_double,
-        tout: &c_double,
+        t: *mut c_double,
+        tout: *const c_double,
         itol: &c_int,
         rtol: &c_double,
         atol: &c_double,
@@ -140,11 +144,19 @@ impl<'a> Jacobian<'a> {
     }
 }
 
-pub struct Adams<'a> {
-    dydt: Box<dyn 'a + Fn(&[f64], f64) -> Vec<f64>>,
+pub struct Adams<'a, X, T>
+where
+    X: Div<T>,
+{
+    dydt: Box<dyn 'a + Fn(&[X], T) -> Vec<Quot<X, T>>>,
 }
 
-impl<'a> Adams<'a> {
+impl<'a, X, T> Adams<'a, X, T>
+where
+    X: Float + Div<T>,
+    T: Float,
+    <X as Div<T>>::Output: Float,
+{
     /// Solves system of ODEs for times in `t`.
     /// First time in `t` has to be the initial time.
     ///
@@ -169,16 +181,16 @@ impl<'a> Adams<'a> {
     ///
     /// assert!((sol[1][0] - y0[0]*0.5_f64.exp()).abs() < 1e-3, "error too large");
     /// ```
-    pub fn solve(&self, y0: &[f64], t: &[f64], atol: f64, rtol: f64) -> Vec<Vec<f64>> {
+    pub fn solve(&self, y0: &[X], t: &[T], atol: f64, rtol: f64) -> Vec<Vec<X>> {
         let f = |n: *const c_int,
                  t_ptr: *const c_double,
                  y_ptr: *mut c_double,
                  dy_ptr: *mut c_double| {
             let (dy, y, t) = unsafe {
                 (
-                    slice::from_raw_parts_mut(dy_ptr, *n as usize),
-                    slice::from_raw_parts(y_ptr, *n as usize),
-                    *t_ptr,
+                    slice::from_raw_parts_mut(dy_ptr as *mut Quot<X, T>, *n as usize),
+                    slice::from_raw_parts(y_ptr as *mut X, *n as usize),
+                    *(t_ptr as *const T),
                 )
             };
             let dy_new = (self.dydt)(y, t);
@@ -189,9 +201,9 @@ impl<'a> Adams<'a> {
         let closure = Closure4::new(&f);
         let call = closure.code_ptr();
 
-        let mut y: Vec<f64> = y0.to_vec();
+        let mut y: Vec<X> = y0.to_vec();
         let n = y0.len();
-        let mut t0 = t[0];
+        let t0 = t[0];
 
         let itol = 1;
         let itask = 1;
@@ -212,9 +224,9 @@ impl<'a> Adams<'a> {
                 dlsode_(
                     *call,
                     &(n as i32),
-                    y.as_mut_ptr(),
-                    &mut t0,
-                    &tout,
+                    y.as_mut_ptr() as *mut f64,
+                    [t0].as_mut_ptr() as *mut f64,
+                    [tout].as_ptr() as *const f64,
                     &itol,
                     &rtol,
                     &atol,
@@ -237,20 +249,37 @@ impl<'a> Adams<'a> {
 
     pub fn new<F>(dydt: F) -> Self
     where
-        F: 'a + Fn(&[f64], f64) -> Vec<f64>,
+        F: 'a + Fn(&[X], T) -> Vec<Quot<X, T>>,
     {
+        //assert_eq_size_val!(X::one(), 1.0_f64);
+        //assert_eq_size_val!(T::one(), 1.0_f64);
         Self {
             dydt: Box::new(dydt),
         }
     }
 }
 
-pub struct BDF<'a> {
-    dydt: Box<dyn 'a + Fn(&[f64], f64) -> Vec<f64>>,
+pub struct BDF<'a, X, T>
+where
+    X: Div<T>,
+{
+    dydt: Box<dyn 'a + Fn(&[X], T) -> Vec<Quot<X, T>>>,
     jacobian: Jacobian<'a>,
 }
 
-impl<'a> BDF<'a> {
+impl<'a, X, T> BDF<'a, X, T>
+where
+    X: Float + Div<T> + Mul<f64>,
+    T: Float + Mul<f64>,
+    <X as Div<T>>::Output: Float + Div<T>,
+    <<X as Div<T>>::Output as Div<T>>::Output: Float,
+{
+    /*
+    const _type_check: () = {
+        const_assert_eq!(std::mem::size_of::<X>(), std::mem::size_of::<f64>());
+        const_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<f64>());
+    };
+    */
     /// Solves system of ODEs for times in `t`.
     /// First time in `t` has to be the initial time.
     ///
@@ -275,16 +304,16 @@ impl<'a> BDF<'a> {
     ///
     /// assert!((sol[1][0] - y0[0]*0.5_f64.exp()).abs() < 1e-3, "error too large");
     /// ```
-    pub fn solve(&self, y0: &[f64], t: &[f64], atol: f64, rtol: f64) -> Vec<Vec<f64>> {
+    pub fn solve(&self, y0: &[X], t: &[T], atol: f64, rtol: f64) -> Vec<Vec<X>> {
         let f = |n: *const c_int,
                  t_ptr: *const c_double,
                  y_ptr: *mut c_double,
                  dy_ptr: *mut c_double| {
             let (dy, y, t) = unsafe {
                 (
-                    slice::from_raw_parts_mut(dy_ptr, *n as usize),
-                    slice::from_raw_parts(y_ptr, *n as usize),
-                    *t_ptr,
+                    slice::from_raw_parts_mut(dy_ptr as *mut Quot<X, T>, *n as usize),
+                    slice::from_raw_parts(y_ptr as *mut X, *n as usize),
+                    *(t_ptr as *const T),
                 )
             };
             let dy_new = (self.dydt)(y, t);
@@ -298,9 +327,9 @@ impl<'a> BDF<'a> {
         let jacobian_closure = Closure7::new(&self.jacobian.udf);
         let call_jacobian = jacobian_closure.code_ptr();
 
-        let mut y: Vec<f64> = y0.to_vec();
+        let mut y: Vec<X> = y0.to_vec();
         let n = y0.len();
-        let mut t0 = t[0];
+        let t0 = t[0];
 
         let itol = 1;
         let itask = 1;
@@ -321,9 +350,9 @@ impl<'a> BDF<'a> {
                 dlsode_(
                     *call,
                     &(n as i32),
-                    y.as_mut_ptr(),
-                    &mut t0,
-                    &tout,
+                    y.as_mut_ptr() as *mut f64,
+                    [t0].as_mut_ptr() as *mut f64,
+                    [tout].as_ptr() as *const f64,
                     &itol,
                     &rtol,
                     &atol,
@@ -346,7 +375,7 @@ impl<'a> BDF<'a> {
 
     pub fn new<F>(dydt: F) -> Self
     where
-        F: 'a + Fn(&[f64], f64) -> Vec<f64>,
+        F: 'a + Fn(&[X], T) -> Vec<Quot<X, T>>,
     {
         let g = |_neq: *const c_int,
                  _t: *const c_double,
@@ -410,7 +439,7 @@ impl<'a> BDF<'a> {
     /// ```
     pub fn gen_full_jacobian_by<G>(self, udf: G) -> Self
     where
-        G: 'a + Fn(&[f64], f64) -> Array2<f64>,
+        G: 'a + Fn(&[X], T) -> Array2<Quot<Quot<X, T>, T>>,
     {
         let g = move |n: *const c_int,
                       t_ptr: *const c_double,
@@ -422,12 +451,12 @@ impl<'a> BDF<'a> {
             let n = unsafe { *n as usize };
             let (dy, y, t) = unsafe {
                 (
-                    slice::from_raw_parts_mut(dy_ptr, n * n),
-                    slice::from_raw_parts(y_ptr, n),
-                    *t_ptr,
+                    slice::from_raw_parts_mut(dy_ptr as *mut Quot<Quot<X, T>, T>, n * n),
+                    slice::from_raw_parts(y_ptr as *mut X, n),
+                    *(t_ptr as *const T),
                 )
             };
-            let mut dy = ArrayViewMut2::<f64>::from_shape((n, n), dy).expect("somthing wrong");
+            let mut dy = ArrayViewMut2::from_shape((n, n), dy).expect("somthing wrong");
             dy.swap_axes(0, 1); // make dy fortran-ordered
             let dy_new = udf(y, t);
             dy.assign(&dy_new);
@@ -483,7 +512,7 @@ impl<'a> BDF<'a> {
     ///         a20  a31  a42  a53   *    *
     pub fn gen_banded_jacobian_by<G>(self, ml: usize, mu: usize, udf: G) -> Self
     where
-        G: 'a + Fn(&[f64], f64) -> Vec<Array1<f64>>,
+        G: 'a + Fn(&[X], T) -> Vec<Array1<Quot<Quot<X, T>, T>>>,
     {
         let g = move |n: *const c_int,
                       t_ptr: *const c_double,
@@ -496,12 +525,12 @@ impl<'a> BDF<'a> {
             let ms: usize = (ml + mu + 1) * n;
             let (dy, y, t) = unsafe {
                 (
-                    slice::from_raw_parts_mut(dy_ptr, ms),
-                    slice::from_raw_parts(y_ptr, n),
-                    *t_ptr,
+                    slice::from_raw_parts_mut(dy_ptr as *mut Quot<Quot<X, T>, T>, ms),
+                    slice::from_raw_parts(y_ptr as *mut X, n),
+                    *(t_ptr as *const T),
                 )
             };
-            let mut dy = ArrayViewMut2::<f64>::from_shape((ml + mu + 1, n), dy).unwrap();
+            let mut dy = ArrayViewMut2::from_shape((ml + mu + 1, n), dy).unwrap();
             dy.swap_axes(0, 1); // make dy fortran-ordered
             let dy_new = udf(y, t);
             for (mut dy, dy_new) in dy.axis_iter_mut(Axis(0)).zip(dy_new.iter()) {
