@@ -47,29 +47,29 @@ where
     }
 
     pub fn solve(&self, init: &[T], atol: &[T], rtol: &[f64]) -> Vec<T> {
-        let atol = ArrayView1::from(atol);
-        let rtol = ArrayView1::from(rtol);
-        let mut x = ArrayView1::from(init).to_owned();
+        let mut x = Vec::from(init);
         for _k in 0..self.max_iter {
-            let y = Array1::from((self.f)(x.as_slice().unwrap()));
-            let z = Array1::from((self.f)(y.as_slice().unwrap()));
-            if Zip::from(&z)
-                .and(&x)
-                .and(&atol)
-                .and(&rtol)
-                .all(|&x1, &x2, &atol, &rtol| {
-                    (x1 - x2).abs() < atol + x1.abs().max(x2.abs()) * rtol
+            let y = (self.f)(&x);
+            let z = (self.f)(&y);
+            if x.iter_mut()
+                .zip(y.iter())
+                .zip(z.iter())
+                .zip(atol.iter())
+                .zip(rtol.iter())
+                .fold(true, |converge, ((((x0, &x1), &x2), &atol), &rtol)| {
+                    let dx0 = x1 - *x0;
+                    if dx0.abs() < atol + x1.abs().max(x0.abs()) * rtol {
+                        *x0 = x1;
+                        converge && true
+                    } else {
+                        let dx1 = x2 - x1;
+                        *x0 = *x0 - dx0.powi(2) / (dx1 - dx0);
+                        false
+                    }
                 })
             {
-                return z.to_vec();
+                return x.to_vec();
             }
-            let dx0 = &y - &x;
-            let dx1 = &z - &y;
-            x = Zip::from(&x).and(&dx0).and(&dx1).and(&atol).apply_collect(
-                |&x0, &dx0, &dx1, &atol| {
-                    x0 - dx0.powi(2) / ((dx1 - dx0).abs() + atol) * (dx1 - dx0).signum()
-                },
-            );
         }
         x.to_vec()
     }

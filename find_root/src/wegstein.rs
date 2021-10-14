@@ -47,35 +47,37 @@ where
     }
 
     pub fn solve(&self, init: &[T], atol: &[T], rtol: &[f64]) -> Vec<T> {
-        let atol = ArrayView1::from(atol);
-        let rtol = ArrayView1::from(rtol);
-        let mut x_prev = ArrayView1::from(init).to_owned();
-        let mut y_prev = Array1::from((self.f)(x_prev.as_slice().unwrap()));
+        let mut x_prev = Vec::from(init);
+        let mut y_prev = (self.f)(&x_prev);
         let mut x = y_prev.clone();
         for _k in 0..self.max_iter {
-            let y = Array1::from((self.f)(x.as_slice().unwrap()));
-            if Zip::from(&y)
-                .and(&x)
-                .and(&atol)
-                .and(&rtol)
-                .all(|&x1, &x2, &atol, &rtol| {
-                    (x1 - x2).abs() < atol + x1.abs().max(x2.abs()) * rtol
-                })
+            let mut y = (self.f)(&x);
+            if x.iter()
+                .zip(x_prev.iter_mut())
+                .zip(y.iter())
+                .zip(y_prev.iter())
+                .zip(atol.iter())
+                .zip(rtol.iter())
+                .fold(
+                    true,
+                    |converge, (((((&x1, x0), &y1), &y0), &atol), &rtol)| {
+                        let dx = x1 - *x0;
+                        let dy = y1 - y0;
+                        if (y1 - x1).abs() < atol + x1.abs().max(y1.abs()) * rtol {
+                            *x0 = y1;
+                            converge && true
+                        } else {
+                            *x0 = (dy * x1 - dx * y1) / (dy - dx);
+                            false
+                        }
+                    },
+                )
             {
-                return y.to_vec();
+                return x_prev.to_vec();
+            } else {
+                std::mem::swap(&mut x, &mut x_prev);
+                std::mem::swap(&mut y, &mut y_prev);
             }
-            let dy = &y - &y_prev;
-            let dx = &x - &x_prev;
-            x_prev = x;
-            y_prev = y;
-            x = Zip::from(&x_prev)
-                .and(&y_prev)
-                .and(&dx)
-                .and(&dy)
-                .and(&atol)
-                .apply_collect(|&x, &y, &dx, &dy, &atol| {
-                    ((dy * x - dx * y) / ((dy - dx).abs() + atol)) * (dy - dx).signum()
-                });
         }
         x.to_vec()
     }
